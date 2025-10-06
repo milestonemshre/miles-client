@@ -12,7 +12,6 @@ import { useFilters } from "@/hooks/useFilters";
 import { useLeadsData } from "@/hooks/useLeadsData";
 import { useLeadsSelection } from "@/hooks/useLeadsSelection";
 import { useNavigationHeader } from "@/hooks/useNavigationHeader";
-import useOneSignal from "@/hooks/useOneSignal";
 import { usePagination } from "@/hooks/usePagination";
 import { useSearchDebounce } from "@/hooks/useSearchDebounce";
 import { useLocalSearchParams } from "expo-router";
@@ -63,7 +62,6 @@ const miles600 = fullConfig.theme.colors.miles[600];
 export default function LeadsPage() {
   const user = useContext(UserContext);
   const params = useLocalSearchParams();
-  useOneSignal(user);
 
   const { searchTerm, setSearchTerm } = useSearchDebounce({
     delay: DEFAULT_PAGINATION.DEBOUNCE_DELAY,

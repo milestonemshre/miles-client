@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import Toast from "react-native-root-toast";
-import { addReminder, updateReminder } from "../services/api";
+import { addReminder, getUsers, updateReminder } from "../services/api";
 
 interface User {
   _id: string;
@@ -67,6 +67,10 @@ const ReminderModal: React.FC<ReminderModalProps> = ({
   const [showAssigneeSelect, setShowAssigneeSelect] = useState(false);
   const [showUnitSelect, setShowUnitSelect] = useState(false);
 
+  // Assignee options state
+  const [fetchedAssigneesOptions, setFetchedAssigneesOptions] = useState<User[]>([]);
+  const [assigneesOptionsLoading, setAssigneesOptionsLoading] = useState(false);
+
   const isEditMode = !!reminderToEdit;
 
   const [reminder, setReminder] = useState<ReminderData>({
@@ -114,6 +118,22 @@ const ReminderModal: React.FC<ReminderModalProps> = ({
           unit: "minutes",
         },
       });
+    }
+
+    // If visible and no assignees options provided, fetch users
+    const hasAssigneesOptionsProp = assigneesOptions && assigneesOptions.length > 0;
+    if (visible && !hasAssigneesOptionsProp && fetchedAssigneesOptions.length === 0) {
+      (async () => {
+        setAssigneesOptionsLoading(true);
+        try {
+          const users = await getUsers();
+          setFetchedAssigneesOptions(users);
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setAssigneesOptionsLoading(false);
+        }
+      })();
     }
 
     // Cleanup function to reset nested modal states when main modal changes
@@ -176,9 +196,12 @@ const ReminderModal: React.FC<ReminderModalProps> = ({
     return `${dateStr} ${timeStr}`;
   };
 
+  // Get effective assignees options (prop or fetched)
+  const effectiveAssigneesOptions = assigneesOptions.length > 0 ? assigneesOptions : fetchedAssigneesOptions;
+
   const getSelectedAssignee = () => {
     if (!reminder.Assignees) return null;
-    return assigneesOptions.find((user) => user._id === reminder.Assignees);
+    return effectiveAssigneesOptions.find((user) => user._id === reminder.Assignees);
   };
 
   const onSubmit = async () => {
@@ -210,12 +233,23 @@ const ReminderModal: React.FC<ReminderModalProps> = ({
         }
       }
 
+      // Log the reminder data being sent
+      console.log('📅 Submitting reminder:', {
+        DateTime: reminderData.DateTime,
+        notifyBefore: reminderData.notifyBefore,
+        Assignees: reminderData.Assignees,
+        Comment: reminderData.Comment,
+        Leadid: reminderData.Leadid
+      });
+
       let result;
       if (isEditMode && reminderToEdit?._id) {
         result = await updateReminder(reminderToEdit._id, reminderData);
       } else {
         result = await addReminder(reminderData);
       }
+      
+      console.log('✅ Reminder API response:', result);
 
       Toast.show(
         isEditMode
@@ -435,11 +469,10 @@ const ReminderModal: React.FC<ReminderModalProps> = ({
           key="assignee-select-modal"
           visible={showAssigneeSelect}
           animationType="slide"
-          transparent={true}
+          transparent={false}
           onRequestClose={() => setShowAssigneeSelect(false)}
         >
-          <View className="flex-1 justify-end bg-black/50">
-            <View className="bg-white rounded-t-lg max-h-[70%]">
+          <View className="flex-1 bg-white">
               <View className="flex-row items-center justify-between p-4 border-b border-gray-200">
                 <Text className="text-lg font-semibold text-gray-900">
                   Select Assignee
@@ -449,7 +482,7 @@ const ReminderModal: React.FC<ReminderModalProps> = ({
                 </TouchableOpacity>
               </View>
 
-              <ScrollView className="max-h-96">
+              <ScrollView className="flex-1">
                 <TouchableOpacity
                   className={`flex-row items-center p-4 ${
                     !reminder.Assignees ? "bg-miles-50" : ""
@@ -466,38 +499,44 @@ const ReminderModal: React.FC<ReminderModalProps> = ({
                     <Ionicons name="checkmark" size={20} color="#3B82F6" />
                   )}
                 </TouchableOpacity>
-                {assigneesOptions.map((user) => (
-                  <TouchableOpacity
-                    key={user._id}
-                    className={`flex-row items-center p-4 ${
-                      reminder.Assignees === user._id ? "bg-miles-50" : ""
-                    }`}
-                    onPress={() => {
-                      setReminder((prev) => ({ ...prev, Assignees: user._id }));
-                      setShowAssigneeSelect(false);
-                    }}
-                  >
-                    <View className="text-base text-gray-900 justify-between flex-1 flex-row">
-                      <Text>{user.username}</Text>
-                      <Text className="mr-2">
-                        {user.Role ? ` (${user.Role})` : ""}
-                      </Text>
-                    </View>
-                    <Ionicons
-                      className={`${
-                        reminder.Assignees === user._id
-                          ? "visible"
-                          : "invisible"
+                {assigneesOptionsLoading ? (
+                  <View className="flex-row justify-center items-center p-4">
+                    <ActivityIndicator size="small" color="#176298" />
+                    <Text className="text-gray-600 ml-2">Loading users...</Text>
+                  </View>
+                ) : (
+                  effectiveAssigneesOptions.map((user) => (
+                    <TouchableOpacity
+                      key={user._id}
+                      className={`flex-row items-center p-4 ${
+                        reminder.Assignees === user._id ? "bg-miles-50" : ""
                       }`}
-                      name="checkmark"
-                      size={20}
-                      color="#3B82F6"
-                    />
-                  </TouchableOpacity>
-                ))}
+                      onPress={() => {
+                        setReminder((prev) => ({ ...prev, Assignees: user._id }));
+                        setShowAssigneeSelect(false);
+                      }}
+                    >
+                      <View className="text-base text-gray-900 justify-between flex-1 flex-row">
+                        <Text>{user.username}</Text>
+                        <Text className="mr-2">
+                          {user.Role ? ` (${user.Role})` : ""}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        className={`${
+                          reminder.Assignees === user._id
+                            ? "visible"
+                            : "invisible"
+                        }`}
+                        name="checkmark"
+                        size={20}
+                        color="#3B82F6"
+                      />
+                    </TouchableOpacity>
+                  ))
+                )}
               </ScrollView>
             </View>
-          </View>
         </Modal>
 
         {/* Unit Select Modal */}

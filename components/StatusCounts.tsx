@@ -128,18 +128,6 @@ const StatusCounts: React.FC<StatusCountsProps> = ({
           </View>
         )}
 
-        {/* Fade effect when collapsed and overflowing */}
-        {!statusCountsExpanded && isOverflowing && (
-          <View
-            className="absolute top-0 right-12 h-full bg-white"
-            style={{
-              width: 70,
-              opacity: 0.8,
-            }}
-            pointerEvents="none"
-          />
-        )}
-
         {/* Expand/collapse button - only show when content overflows */}
         {isOverflowing && (
           <TouchableOpacity
@@ -148,7 +136,7 @@ const StatusCounts: React.FC<StatusCountsProps> = ({
             style={{ zIndex: 10 }}
           >
             <Text className="text-xs text-miles-500">
-              {statusCountsExpanded ? "Show less" : "Show more"}
+              {statusCountsExpanded ? "Less" : "More"}
             </Text>
           </TouchableOpacity>
         )}

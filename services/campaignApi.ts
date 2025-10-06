@@ -13,12 +13,19 @@ export interface CampaignLeadsResponse {
   totalLeads: number;
 }
 
+export interface CampaignLeadIdsResponse {
+  message: string;
+  data: string[];
+  totalLeads: number;
+}
+
 export interface CampaignsWithCountsResponse {
   data: Array<{
     _id: string;
     Tag: string;
     leadCount: number;
     pendingLeadsCount?: number;
+    lastLeadAssignedDate?: string;
   }>;
   pagination?: {
     currentPage: number;
@@ -85,16 +92,48 @@ export const fetchCampaignLeads = async (
   };
 };
 
+export interface CampaignsWithCountsParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  sortBy?: "leadCount" | "Tag" | "latestAssigned" | "newest";
+  sortOrder?: "asc" | "desc";
+  signal?: AbortSignal;
+}
+
 /**
  * Fetch all campaigns with their lead counts
  */
 export const fetchCampaignsWithCounts = async (
-  page = 1,
-  limit = 100
+  params: CampaignsWithCountsParams = {}
 ): Promise<CampaignsWithCountsResponse> => {
+  const {
+    page = 1,
+    limit = 100,
+    search = "",
+    sortBy = "leadCount",
+    sortOrder = "desc",
+    signal,
+  } = params;
+
   const headers = await createAuthHeaders();
+
+  // Build query parameters
+  const queryParams = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+    sortBy,
+    sortOrder,
+  });
+
+  if (search.trim()) {
+    queryParams.append("search", search.trim());
+  }
+
   // Use the properly optimized with-counts endpoint
-  const campaignsUrl = `${process.env.EXPO_PUBLIC_BASE_URL}/api/campaigns/with-counts?page=${page}&limit=${limit}&sortBy=leadCount&sortOrder=desc`;
+  const campaignsUrl = `${
+    process.env.EXPO_PUBLIC_BASE_URL
+  }/api/campaigns/with-counts?${queryParams.toString()}`;
 
   console.log("Fetching campaigns from:", campaignsUrl);
 
@@ -103,6 +142,7 @@ export const fetchCampaignsWithCounts = async (
       fetch(campaignsUrl, {
         method: "GET",
         headers,
+        signal, // Add abort signal support
       }),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Request timeout after 30s")), 30000)
@@ -161,6 +201,47 @@ export const fetchCampaignsWithCounts = async (
     });
     throw error;
   }
+};
+
+/**
+ * Fetch ordered lead IDs for a campaign (lightweight, optimized for calling queue)
+ */
+export const fetchCampaignLeadIds = async (
+  campaignFilters: CampaignFilters
+): Promise<CampaignLeadIdsResponse> => {
+  if (!campaignFilters.campaignName) {
+    throw new Error("Campaign name is required");
+  }
+
+  const headers = await createAuthHeaders();
+  const requestBody = {
+    campaignName: campaignFilters.campaignName,
+    page: campaignFilters.page || 1,
+    limit: campaignFilters.limit || 1000,
+  };
+
+  const response = await fetch(
+    `${process.env.EXPO_PUBLIC_BASE_URL}/api/Lead/campaign/ids`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify(requestBody),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to fetch campaign lead ids: HTTP ${response.status} - ${errorText}`
+    );
+  }
+
+  const data = await response.json();
+  return {
+    message: data.message,
+    data: Array.isArray(data.data) ? data.data : [],
+    totalLeads: data.totalLeads || 0,
+  };
 };
 
 /**

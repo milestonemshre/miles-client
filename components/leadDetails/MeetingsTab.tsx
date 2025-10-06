@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import Toast from "react-native-root-toast";
 import LoadingView from "../LoadingView";
+import MeetingModal from "../MeetingModal";
 
 interface Lead {
   _id: string;
@@ -43,6 +44,7 @@ const MeetingsTab: React.FC<MeetingsTabProps> = ({ lead }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAddMeeting, setShowAddMeeting] = useState(false);
 
   const fetchMeetings = useCallback(async () => {
     try {
@@ -115,156 +117,175 @@ const MeetingsTab: React.FC<MeetingsTabProps> = ({ lead }) => {
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-white"
-      contentContainerStyle={{ flexGrow: 1 }}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      {error && (
-        <View className="bg-red-50 border border-red-200 rounded-lg m-4 p-4">
-          <View className="flex-row items-center">
-            <Ionicons name="alert-circle" size={20} color="#DC2626" />
-            <Text className="text-red-700 font-medium ml-2">
-              Error Loading Meetings
+    <View className="flex-1 bg-white">
+      <ScrollView
+        className="flex-1 p-4"
+        contentContainerStyle={{ flexGrow: 1 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+      >
+        {error && (
+          <View className="bg-red-50 border border-red-200 rounded-lg mb-4 p-4">
+            <View className="flex-row items-center">
+              <Ionicons name="alert-circle" size={20} color="#DC2626" />
+              <Text className="text-red-700 font-medium ml-2">Error Loading Meetings</Text>
+            </View>
+            <Text className="text-red-600 text-sm mt-1">{error}</Text>
+            <TouchableOpacity
+              className="bg-red-600 rounded-lg px-4 py-2 mt-3 self-start"
+              onPress={() => {
+                setError(null);
+                setLoading(true);
+                fetchMeetings();
+              }}
+            >
+              <Text className="text-white text-sm font-medium">Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {meetings.length === 0 && !error ? (
+          <View className="flex-1 justify-center items-center py-16">
+            <Ionicons name="calendar-outline" size={64} color="#9CA3AF" />
+            <Text className="text-xl font-semibold text-gray-700 mt-4 mb-2 text-center">
+              No Meetings
+            </Text>
+            <Text className="text-base text-gray-500 text-center leading-6">
+              Be the first to schedule a meeting for this lead.
             </Text>
           </View>
-          <Text className="text-red-600 text-sm mt-1">{error}</Text>
-          <TouchableOpacity
-            className="bg-red-600 rounded-lg px-4 py-2 mt-3 self-start"
-            onPress={() => {
-              setError(null);
-              setLoading(true);
-              fetchMeetings();
-            }}
-          >
-            <Text className="text-white text-sm font-medium">Try Again</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {meetings.length === 0 && !error ? (
-        <View className="flex-1 justify-center items-center py-16 px-4">
-          <Ionicons name="calendar-outline" size={64} color="#9CA3AF" />
-          <Text className="text-xl font-semibold text-gray-700 mt-4 mb-2 text-center">
-            No Meetings
-          </Text>
-          <Text className="text-base text-gray-500 text-center leading-6">
-            No meetings have been scheduled for this lead yet.
-          </Text>
-        </View>
-      ) : (
-        <View className="p-4">
-          <Text className="text-lg font-semibold text-gray-900 mb-4">
-            Meetings ({meetings.length})
-          </Text>
-
-          {meetings.map((meeting, index) => (
-            <View
-              key={meeting._id || index}
-              className="bg-white border border-gray-200 rounded-lg p-4 mb-3 shadow-sm"
-            >
-              {/* Header */}
-              <View className="flex-row justify-between items-start mb-3">
-                <View className="flex-1 pr-2">
-                  <Text className="text-base font-semibold text-gray-900 mb-1">
-                    {meeting.Subject}
-                  </Text>
-                  <View className="flex-row items-center flex-wrap gap-2">
-                    <View
-                      className={`px-2 py-1 rounded-full border ${getPriorityColor(
-                        meeting.Priority
-                      )}`}
-                    >
-                      <Text
-                        className={`text-xs font-medium ${
-                          getPriorityColor(meeting.Priority).split(" ")[0]
-                        }`}
+        ) : (
+          <View className="pb-4">
+            <Text className="text-sm text-gray-500 mb-2">Meetings ({meetings.length})</Text>
+            {meetings.map((meeting, index) => (
+              <View
+                key={meeting._id || index}
+                className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-3"
+              >
+                {/* Header */}
+                <View className="flex-row justify-between items-start mb-3">
+                  <View className="flex-1 pr-2">
+                    <Text className="text-base font-semibold text-gray-900 mb-1">
+                      {meeting.Subject}
+                    </Text>
+                    <View className="flex-row items-center flex-wrap gap-2">
+                      <View
+                        className={`px-2 py-1 rounded-full border ${getPriorityColor(
+                          meeting.Priority
+                        )}`}
                       >
-                        {meeting.Priority} Priority
-                      </Text>
-                    </View>
-                    <View
-                      className={`px-2 py-1 rounded-full border ${getStatusColor(
-                        meeting.Status
-                      )}`}
-                    >
-                      <Text
-                        className={`text-xs font-medium ${
-                          getStatusColor(meeting.Status).split(" ")[0]
-                        }`}
+                        <Text
+                          className={`text-xs font-medium ${
+                            getPriorityColor(meeting.Priority).split(" ")[0]
+                          }`}
+                        >
+                          {meeting.Priority} Priority
+                        </Text>
+                      </View>
+                      <View
+                        className={`px-2 py-1 rounded-full border ${getStatusColor(
+                          meeting.Status
+                        )}`}
                       >
-                        {meeting.Status}
-                      </Text>
+                        <Text
+                          className={`text-xs font-medium ${
+                            getStatusColor(meeting.Status).split(" ")[0]
+                          }`}
+                        >
+                          {meeting.Status}
+                        </Text>
+                      </View>
                     </View>
                   </View>
-                </View>
-                <Ionicons name="calendar" size={20} color="#6B7280" />
-              </View>
-
-              {/* Meeting Details */}
-              <View className="space-y-2">
-                <View className="flex-row items-center">
-                  <Ionicons name="time" size={16} color="#6B7280" />
-                  <Text className="text-sm text-gray-600 ml-2">
-                    {formatTimestamp(meeting.MeetingDate)} at{" "}
-                    {meeting.MeetingTime}
-                  </Text>
+                  <Ionicons name="calendar" size={20} color="#6B7280" />
                 </View>
 
-                {meeting.Duration && (
+                {/* Meeting Details */}
+                <View className="space-y-2">
                   <View className="flex-row items-center">
-                    <Ionicons name="hourglass" size={16} color="#6B7280" />
+                    <Ionicons name="time" size={16} color="#6B7280" />
                     <Text className="text-sm text-gray-600 ml-2">
-                      Duration: {meeting.Duration} minutes
+                      {formatTimestamp(meeting.MeetingDate)} at{" "}
+                      {meeting.MeetingTime}
                     </Text>
                   </View>
-                )}
 
-                <View className="flex-row items-center">
-                  <Ionicons name="business" size={16} color="#6B7280" />
-                  <Text className="text-sm text-gray-600 ml-2">
-                    Type: {meeting.MeetingType}
-                  </Text>
-                </View>
-
-                {meeting.Assignee && (
-                  <View className="flex-row items-center">
-                    <Ionicons name="person" size={16} color="#6B7280" />
-                    <Text className="text-sm text-gray-600 ml-2">
-                      Assigned to: {meeting.Assignee.username}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Description */}
-              {meeting.Description && (
-                <View className="mt-3 pt-3 border-t border-gray-100">
-                  <Text className="text-sm text-gray-700">
-                    {meeting.Description}
-                  </Text>
-                </View>
-              )}
-
-              {/* Footer with timestamps */}
-              <View className="mt-3 pt-3 border-t border-gray-100">
-                <Text className="text-xs text-gray-400">
-                  Created: {formatTimestamp(meeting.createdAt)}
-                  {meeting.updatedAt !== meeting.createdAt && (
-                    <Text>
-                      {" "}
-                      • Updated: {formatTimestamp(meeting.updatedAt)}
-                    </Text>
+                  {meeting.Duration && (
+                    <View className="flex-row items-center">
+                      <Ionicons name="hourglass" size={16} color="#6B7280" />
+                      <Text className="text-sm text-gray-600 ml-2">
+                        Duration: {meeting.Duration} minutes
+                      </Text>
+                    </View>
                   )}
-                </Text>
+
+                  <View className="flex-row items-center">
+                    <Ionicons name="business" size={16} color="#6B7280" />
+                    <Text className="text-sm text-gray-600 ml-2">
+                      Type: {meeting.MeetingType}
+                    </Text>
+                  </View>
+
+                  {meeting.Assignee && (
+                    <View className="flex-row items-center">
+                      <Ionicons name="person" size={16} color="#6B7280" />
+                      <Text className="text-sm text-gray-600 ml-2">
+                        Assigned to: {meeting.Assignee.username}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Description */}
+                {meeting.Description && (
+                  <View className="mt-3 pt-3 border-t border-gray-100">
+                    <Text className="text-sm text-gray-700">
+                      {meeting.Description}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Footer with timestamps */}
+                <View className="mt-3 pt-3 border-t border-gray-100">
+                  <Text className="text-xs text-gray-400">
+                    Created: {formatTimestamp(meeting.createdAt)}
+                    {meeting.updatedAt !== meeting.createdAt && (
+                      <Text>
+                        {" "}
+                        • Updated: {formatTimestamp(meeting.updatedAt)}
+                      </Text>
+                    )}
+                  </Text>
+                </View>
               </View>
-            </View>
-          ))}
-        </View>
-      )}
-    </ScrollView>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Add Meeting Button */}
+      <View className="p-4 border-t border-gray-200">
+        <TouchableOpacity
+          onPress={() => setShowAddMeeting(true)}
+          className="bg-miles-500 rounded-lg py-3 px-4 flex-row items-center justify-center"
+        >
+          <Ionicons name="add" size={20} color="white" />
+          <Text className="text-white font-medium ml-2">Add Meeting</Text>
+        </TouchableOpacity>
+      </View>
+
+      <MeetingModal
+        visible={showAddMeeting}
+        onClose={() => setShowAddMeeting(false)}
+        leadId={lead._id}
+        assigneeOptions={[]}
+        onSuccess={() => {
+          setShowAddMeeting(false);
+          setLoading(true);
+          fetchMeetings();
+        }}
+      />
+    </View>
   );
 };
 

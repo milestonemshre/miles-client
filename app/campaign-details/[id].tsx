@@ -165,8 +165,15 @@ export default function CampaignDetailsPage() {
   );
 
   const handleLeadPress = useCallback((lead: Lead) => {
-    router.push(`/lead-details/${lead._id}`);
-  }, []);
+    router.push({
+      pathname: `/lead-details/${lead._id}`,
+      params: {
+        fromCalling: "true",
+        campaignId,
+        campaignName,
+      },
+    });
+  }, [campaignId, campaignName]);
 
   // Helper function to determine text color based on background color
   const getTextColorForBackground = (backgroundColor: string): string => {

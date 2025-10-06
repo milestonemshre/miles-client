@@ -1,4 +1,5 @@
 import LoginPage from "@/components/LoginPage";
+import useOneSignal from "@/hooks/useOneSignal";
 import { Stack } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
@@ -16,6 +17,9 @@ export default function RootLayout() {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<any | null>(null);
   const [authCheckInProgress, setAuthCheckInProgress] = useState(false);
+
+  // Initialize OneSignal when user is available
+  useOneSignal(user);
 
   // Function to validate stored token and handle logout
   const validateStoredToken = async () => {

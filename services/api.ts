@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
+import { jwtDecode } from "jwt-decode";
 import Toast from "react-native-root-toast";
-import { jwtDecode } from 'jwt-decode';
 export interface FilterOptions {
   searchTerm: string;
   searchBoxFilters: string[];
@@ -180,7 +180,9 @@ export const getUsers = async () => {
 
   try {
     const headers = await createAuthHeaders();
-    const url = `${process.env.EXPO_PUBLIC_BASE_URL}/api/Users/get`;
+    const url = `${process.env.EXPO_PUBLIC_BASE_URL}/api/staff/get`;
+
+    console.log("👥 Fetching users from:", url);
 
     const response = await fetch(url, {
       method: "GET",
@@ -189,11 +191,15 @@ export const getUsers = async () => {
 
     if (!response.ok) {
       const errorData = await response
-        .json()
-        .catch(() => ({ error: `HTTP ${response.status}` }));
-      throw new Error(
-        errorData.error || `Failed to fetch users: HTTP ${response.status}`
-      );
+        .text() // Use text() first to see raw response
+        .then((text) => {
+          try {
+            return JSON.parse(text);
+          } catch {
+            return { error: text || `HTTP ${response.status}` };
+          }
+        });      
+      }
     }
 
     const result = await response.json();

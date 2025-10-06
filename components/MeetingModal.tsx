@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import Toast from "react-native-root-toast";
-import { addMeeting, searchDevelopers, updateMeeting } from "../services/api";
+import { addMeeting, getUsers, searchDevelopers, updateMeeting } from "../services/api";
 import SearchableDropdown from "./SearchableDropdown";
 
 interface User {
@@ -89,6 +89,10 @@ const MeetingModal: React.FC<MeetingModalProps> = ({
   // Developer search state
   const [developers, setDevelopers] = useState<any[]>([]);
   const [developerSearchLoading, setDeveloperSearchLoading] = useState(false);
+
+  // Assignee options state
+  const [fetchedAssigneeOptions, setFetchedAssigneeOptions] = useState<User[]>([]);
+  const [assigneeOptionsLoading, setAssigneeOptionsLoading] = useState(false);
 
   // Modal selection states
   const [showPrioritySelect, setShowPrioritySelect] = useState(false);
@@ -208,6 +212,22 @@ const MeetingModal: React.FC<MeetingModalProps> = ({
     if (visible && developers.length === 0) {
       handleDeveloperSearch("");
     }
+
+    // If visible and no assignee options provided, fetch users
+    const hasAssigneesProp = assigneeOptions && assigneeOptions.length > 0;
+    if (visible && !hasAssigneesProp && fetchedAssigneeOptions.length === 0) {
+      (async () => {
+        setAssigneeOptionsLoading(true);
+        try {
+          const users = await getUsers();
+          setFetchedAssigneeOptions(users);
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setAssigneeOptionsLoading(false);
+        }
+      })();
+    }
   }, [visible]);
 
   const updateDateTime = () => {
@@ -250,13 +270,16 @@ const MeetingModal: React.FC<MeetingModalProps> = ({
     }
   };
 
+  // Get effective assignee options (prop or fetched)
+  const effectiveAssigneeOptions = assigneeOptions.length > 0 ? assigneeOptions : fetchedAssigneeOptions;
+
   const getSelectedUser = (userId: string) => {
-    return assigneeOptions.find((user) => user._id === userId);
+    return effectiveAssigneeOptions.find((user) => user._id === userId);
   };
 
   const getSelectedUsers = (userIds: string[]) => {
     return userIds
-      .map((id) => assigneeOptions.find((user) => user._id === id))
+      .map((id) => effectiveAssigneeOptions.find((user) => user._id === id))
       .filter(Boolean);
   };
 
@@ -909,11 +932,10 @@ const MeetingModal: React.FC<MeetingModalProps> = ({
           key="assignee-select-modal"
           visible={showAssigneeSelect}
           animationType="slide"
-          transparent={true}
+          transparent={false}
           onRequestClose={() => setShowAssigneeSelect(false)}
         >
-          <View className="flex-1 justify-end bg-black/50">
-            <View className="bg-white rounded-t-lg max-h-[70%]">
+          <View className="flex-1 bg-white">
               <View className="flex-row items-center justify-between p-4 border-b border-gray-200">
                 <Text className="text-lg font-semibold text-gray-900">
                   Select Assignee
@@ -923,7 +945,7 @@ const MeetingModal: React.FC<MeetingModalProps> = ({
                 </TouchableOpacity>
               </View>
 
-              <ScrollView className="max-h-96">
+              <ScrollView className="flex-1">
                 <TouchableOpacity
                   className={`flex-row items-center p-4 ${
                     !meeting.Assignees ? "bg-miles-50" : ""
@@ -940,36 +962,42 @@ const MeetingModal: React.FC<MeetingModalProps> = ({
                     <Ionicons name="checkmark" size={20} color="#3B82F6" />
                   )}
                 </TouchableOpacity>
-                {assigneeOptions.map((user) => (
-                  <TouchableOpacity
-                    key={user._id}
-                    className={`flex-row items-center p-4 ${
-                      meeting.Assignees === user._id ? "bg-miles-50" : ""
-                    }`}
-                    onPress={() => {
-                      setMeeting((prev) => ({ ...prev, Assignees: user._id }));
-                      setShowAssigneeSelect(false);
-                    }}
-                  >
-                    <View className="text-base text-gray-900 justify-between flex-1 flex-row">
-                      <Text>{user.username}</Text>
-                      <Text className="mr-2">
-                        {user.Role ? ` (${user.Role})` : ""}
-                      </Text>
-                    </View>
-                    <Ionicons
-                      className={`${
-                        meeting.Assignees === user._id ? "visible" : "invisible"
+                {assigneeOptionsLoading ? (
+                  <View className="flex-row justify-center items-center p-4">
+                    <ActivityIndicator size="small" color="#176298" />
+                    <Text className="text-gray-600 ml-2">Loading users...</Text>
+                  </View>
+                ) : (
+                  effectiveAssigneeOptions.map((user) => (
+                    <TouchableOpacity
+                      key={user._id}
+                      className={`flex-row items-center p-4 ${
+                        meeting.Assignees === user._id ? "bg-miles-50" : ""
                       }`}
-                      name="checkmark"
-                      size={20}
-                      color="#3B82F6"
-                    />
-                  </TouchableOpacity>
-                ))}
+                      onPress={() => {
+                        setMeeting((prev) => ({ ...prev, Assignees: user._id }));
+                        setShowAssigneeSelect(false);
+                      }}
+                    >
+                      <View className="text-base text-gray-900 justify-between flex-1 flex-row">
+                        <Text>{user.username}</Text>
+                        <Text className="mr-2">
+                          {user.Role ? ` (${user.Role})` : ""}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        className={`${
+                          meeting.Assignees === user._id ? "visible" : "invisible"
+                        }`}
+                        name="checkmark"
+                        size={20}
+                        color="#3B82F6"
+                      />
+                    </TouchableOpacity>
+                  ))
+                )}
               </ScrollView>
             </View>
-          </View>
         </Modal>
 
         {/* Unit Select Modal */}

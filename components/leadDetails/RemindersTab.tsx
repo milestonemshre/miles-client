@@ -10,6 +10,7 @@ import {
 import Toast from "react-native-root-toast";
 import { getLeadReminders } from "../../services/api";
 import LoadingView from "../LoadingView";
+import ReminderModal from "../ReminderModal";
 
 interface Lead {
   _id: string;
@@ -39,6 +40,7 @@ const RemindersTab: React.FC<RemindersTabProps> = ({ lead }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAddReminder, setShowAddReminder] = useState(false);
 
   const fetchReminders = async (showRefreshIndicator = false) => {
     try {
@@ -219,32 +221,52 @@ const RemindersTab: React.FC<RemindersTabProps> = ({ lead }) => {
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-gray-50"
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-      contentContainerStyle={{ flexGrow: 1 }}
-    >
-      {reminders.length > 0 ? (
-        <View className="p-4">
-          <Text className="text-lg font-semibold text-gray-900 mb-4">
-            Reminders ({reminders.length})
-          </Text>
-          {reminders.map(renderReminder)}
-        </View>
-      ) : (
-        <View className="flex-1 justify-center items-center py-16 px-4">
-          <Ionicons name="alarm-outline" size={64} color="#9CA3AF" />
-          <Text className="text-xl font-semibold text-gray-700 mt-4 mb-2 text-center">
-            No Reminders
-          </Text>
-          <Text className="text-base text-gray-500 text-center leading-6">
-            No reminders have been set for this lead yet.
-          </Text>
-        </View>
-      )}
-    </ScrollView>
+    <View className="flex-1 bg-white">
+      <ScrollView
+        className="flex-1 p-4"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+      >
+        {reminders.length === 0 ? (
+          <View className="flex-1 justify-center items-center py-16">
+            <Ionicons name="alarm-outline" size={64} color="#9CA3AF" />
+            <Text className="text-xl font-semibold text-gray-700 mt-4 mb-2 text-center">
+              No Reminders
+            </Text>
+            <Text className="text-base text-gray-500 text-center leading-6">
+              Be the first to add a reminder for this lead.
+            </Text>
+          </View>
+        ) : (
+          <View className="pb-4">
+            <Text className="text-sm text-gray-500 mb-2">Reminders ({reminders.length})</Text>
+            {reminders.map(renderReminder)}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Add Reminder Button */}
+      <View className="p-4 border-t border-gray-200">
+        <TouchableOpacity
+          onPress={() => setShowAddReminder(true)}
+          className="bg-miles-500 rounded-lg py-3 px-4 flex-row items-center justify-center"
+        >
+          <Ionicons name="add" size={20} color="white" />
+          <Text className="text-white font-medium ml-2">Add Reminder</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ReminderModal
+        visible={showAddReminder}
+        onClose={() => setShowAddReminder(false)}
+        leadId={lead._id}
+        assigneesOptions={[]}
+        onSuccess={() => {
+          setShowAddReminder(false);
+          fetchReminders();
+        }}
+      />
+    </View>
   );
 };
 
