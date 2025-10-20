@@ -13,6 +13,22 @@ import Toast from "react-native-root-toast";
 import LoadingView from "../LoadingView";
 import MeetingModal from "../MeetingModal";
 
+// Safe date formatter that handles invalid dates
+const safeFormatTimestamp = (dateValue: any) => {
+  if (!dateValue) return "Not set";
+
+  try {
+    const date = new Date(dateValue);
+    if (isNaN(date.getTime())) {
+      return "Invalid date";
+    }
+    return formatTimestamp(date);
+  } catch (error) {
+    console.warn("Date formatting error:", error, "Value:", dateValue);
+    return "Invalid date";
+  }
+};
+
 interface Lead {
   _id: string;
   Name: string;
@@ -21,18 +37,32 @@ interface Lead {
 interface Meeting {
   _id: string;
   Subject: string;
-  Description?: string;
-  MeetingDate: string;
-  MeetingTime: string;
+  Comment?: string;
+  Date: string;
   Duration?: number;
   Priority: string;
   MeetingType: string;
   Status: string;
-  Assignee?: {
+  Assignees: Array<{
+    _id: string;
+    username: string;
+  }>;
+  timestamp: string;
+  Location?: string;
+  addedby?: {
+    _id: string;
     username: string;
   };
-  createdAt: string;
-  updatedAt: string;
+  Leadid?: {
+    _id: string;
+    Name: string;
+  };
+  notificationInfo?: {
+    reminderSent: boolean;
+    reminderScheduledFor?: string | null;
+  };
+  MeetingTime?: string;
+  updatedAt?: string;
 }
 
 interface MeetingsTabProps {
@@ -121,14 +151,18 @@ const MeetingsTab: React.FC<MeetingsTabProps> = ({ lead }) => {
       <ScrollView
         className="flex-1 p-4"
         contentContainerStyle={{ flexGrow: 1 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
         showsVerticalScrollIndicator={false}
       >
         {error && (
           <View className="bg-red-50 border border-red-200 rounded-lg mb-4 p-4">
             <View className="flex-row items-center">
               <Ionicons name="alert-circle" size={20} color="#DC2626" />
-              <Text className="text-red-700 font-medium ml-2">Error Loading Meetings</Text>
+              <Text className="text-red-700 font-medium ml-2">
+                Error Loading Meetings
+              </Text>
             </View>
             <Text className="text-red-600 text-sm mt-1">{error}</Text>
             <TouchableOpacity
@@ -156,7 +190,9 @@ const MeetingsTab: React.FC<MeetingsTabProps> = ({ lead }) => {
           </View>
         ) : (
           <View className="pb-4">
-            <Text className="text-sm text-gray-500 mb-2">Meetings ({meetings.length})</Text>
+            <Text className="text-sm text-gray-500 mb-2">
+              Meetings ({meetings.length})
+            </Text>
             {meetings.map((meeting, index) => (
               <View
                 key={meeting._id || index}
@@ -205,8 +241,8 @@ const MeetingsTab: React.FC<MeetingsTabProps> = ({ lead }) => {
                   <View className="flex-row items-center">
                     <Ionicons name="time" size={16} color="#6B7280" />
                     <Text className="text-sm text-gray-600 ml-2">
-                      {formatTimestamp(meeting.MeetingDate)} at{" "}
-                      {meeting.MeetingTime}
+                      {safeFormatTimestamp(meeting.Date)} at{" "}
+                      {meeting.MeetingTime || "Not set"}
                     </Text>
                   </View>
 
@@ -226,21 +262,24 @@ const MeetingsTab: React.FC<MeetingsTabProps> = ({ lead }) => {
                     </Text>
                   </View>
 
-                  {meeting.Assignee && (
+                  {meeting.Assignees && meeting.Assignees.length > 0 && (
                     <View className="flex-row items-center">
                       <Ionicons name="person" size={16} color="#6B7280" />
                       <Text className="text-sm text-gray-600 ml-2">
-                        Assigned to: {meeting.Assignee.username}
+                        Assigned to:{" "}
+                        {meeting.Assignees.map(
+                          (assignee) => assignee.username
+                        ).join(", ")}
                       </Text>
                     </View>
                   )}
                 </View>
 
-                {/* Description */}
-                {meeting.Description && (
+                {/* Comment */}
+                {meeting.Comment && (
                   <View className="mt-3 pt-3 border-t border-gray-100">
                     <Text className="text-sm text-gray-700">
-                      {meeting.Description}
+                      {meeting.Comment}
                     </Text>
                   </View>
                 )}
@@ -248,13 +287,7 @@ const MeetingsTab: React.FC<MeetingsTabProps> = ({ lead }) => {
                 {/* Footer with timestamps */}
                 <View className="mt-3 pt-3 border-t border-gray-100">
                   <Text className="text-xs text-gray-400">
-                    Created: {formatTimestamp(meeting.createdAt)}
-                    {meeting.updatedAt !== meeting.createdAt && (
-                      <Text>
-                        {" "}
-                        • Updated: {formatTimestamp(meeting.updatedAt)}
-                      </Text>
-                    )}
+                    Created: {safeFormatTimestamp(meeting.timestamp)}
                   </Text>
                 </View>
               </View>

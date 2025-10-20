@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Linking, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { formatPhoneNumber, formatTimestamp } from "../../utils/dateFormatter";
+import { formatTimestamp } from "../../utils/dateFormatter";
+import RequirementsSection from "./RequirementsSection";
 
 interface Lead {
   _id: string;
@@ -28,9 +29,9 @@ interface Lead {
     username: string;
     Avatar?: string;
   };
-  tags?: Array<{
+  tags?: {
     Tag: string;
-  }>;
+  }[];
   timestamp?: string;
   LeadAssignedDate?: string;
   dynamicFields?: Record<string, any>;
@@ -43,11 +44,6 @@ interface ProfileTabProps {
 }
 
 const ProfileTab: React.FC<ProfileTabProps> = ({ lead, onLeadUpdate, userPermissions }) => {
-  const handlePhoneCall = (phoneNumber: string) => {
-    if (phoneNumber && !phoneNumber.startsWith("***")) {
-      Linking.openURL(`tel:${formatPhoneNumber(phoneNumber)}`);
-    }
-  };
 
   const handleEmailPress = (email: string) => {
     if (email) {
@@ -106,38 +102,22 @@ const ProfileTab: React.FC<ProfileTabProps> = ({ lead, onLeadUpdate, userPermiss
               {lead.Description || "No description provided"}
             </Text>
           </View>
+          {lead.Email && (
+            <View className="border-b border-gray-100 py-2">
+              <Text className="text-sm font-medium text-gray-500">
+                Email:{" "}
+                <Text 
+                  className="text-base text-miles-600 font-normal"
+                  onPress={() => handleEmailPress(lead.Email!)}
+                >
+                  {lead.Email}
+                </Text>
+              </Text>
+            </View>
+          )}
         </>
       )}
 
-      {/* Contact Information */}
-      {renderInfoSection(
-        "Contact Information",
-        <>
-          {lead.Phone && renderInfoRow(
-            "Primary Phone",
-            formatPhoneNumber(lead.Phone),
-            "call",
-            () => handlePhoneCall(lead.Phone!)
-          )}
-          {lead.AltPhone && renderInfoRow(
-            "Alternative Phone",
-            formatPhoneNumber(lead.AltPhone),
-            "call",
-            () => handlePhoneCall(lead.AltPhone!)
-          )}
-          {lead.Email && renderInfoRow(
-            "Email",
-            lead.Email,
-            "mail",
-            () => handleEmailPress(lead.Email!)
-          )}
-          {lead.Address && renderInfoRow(
-            "Address",
-            lead.Address,
-            "location"
-          )}
-        </>
-      )}
 
       {/* Lead Details */}
       {renderInfoSection(
@@ -151,20 +131,11 @@ const ProfileTab: React.FC<ProfileTabProps> = ({ lead, onLeadUpdate, userPermiss
             "Source",
             lead.Source.Source
           )}
-          {lead.Type && renderInfoRow(
-            "Type",
-            lead.Type
-          )}
-          {lead.Project && renderInfoRow(
-            "Project",
-            lead.Project
-          )}
-          {lead.Budget && renderInfoRow(
-            "Budget",
-            lead.Budget
-          )}
         </>
       )}
+
+      {/* Requirements Section */}
+      <RequirementsSection lead={lead} />
 
       {/* Tags */}
       {lead.tags && lead.tags.length > 0 && renderInfoSection(

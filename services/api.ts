@@ -31,7 +31,7 @@ export interface LeadsResponse {
 export interface FilterOption {
   value: string;
   label: string;
-  color?: string;
+  color: string;
   requiresReminder?: "yes" | "no" | "optional";
 }
 
@@ -198,8 +198,10 @@ export const getUsers = async () => {
           } catch {
             return { error: text || `HTTP ${response.status}` };
           }
-        });      
-      }
+        });
+      throw new Error(
+        errorData.error || `Failed to fetch users: HTTP ${response.status}`
+      );
     }
 
     const result = await response.json();
@@ -430,7 +432,7 @@ export const fetchStatusOptions = async (): Promise<FilterOption[]> => {
       return data.data.map((status: any) => ({
         value: status._id,
         label: status.Status,
-        color: status.color,
+        color: status.color || "#6B7280", // Default color if not provided
         requiresReminder: status.requiresReminder,
       }));
     } else {
@@ -460,6 +462,7 @@ export const fetchSourceOptions = async (): Promise<FilterOption[]> => {
       return data.data.map((source: any) => ({
         value: source._id,
         label: source.Source,
+        color: source.color || "#6B7280", // Default color if not provided
       }));
     } else {
       return [];
@@ -498,6 +501,7 @@ export const fetchTagOptions = async (
       const tagOpts = data.data.map((tag: any) => ({
         label: tag.Tag,
         value: `${tag.Tag}::${tag._id}`, // Use actual tag ID
+        color: tag.color || "#6B7280", // Default color if not provided
       }));
 
       return {
@@ -668,28 +672,28 @@ export const fetchLeadComments = async (leadId: string): Promise<any[]> => {
 };
 
 /**
- * Search developers using Algolia API
+ * Search developers using our internal API
  */
 export const searchDevelopers = async (query: string = ""): Promise<any[]> => {
   try {
+    if (!(await validateAuthToken())) {
+      throw new Error("Authentication failed");
+    }
+
+    const headers = await createAuthHeaders();
+    const params = new URLSearchParams({
+      limit: '20', // Match the previous limit of 20 results
+    });
+    
+    if (query.trim()) {
+      params.append('search', query.trim());
+    }
+
     const response = await fetch(
-      "https://ll8iz711cs-dsn.algolia.net/1/indexes/*/queries?x-algolia-agent=Algolia%20for%20JavaScript%20(3.35.1)%3B%20Browser%20(lite)&x-algolia-application-id=LL8IZ711CS&x-algolia-api-key=15cb8b0a2d2d435c6613111d860ecfc5",
+      `${process.env.EXPO_PUBLIC_BASE_URL}/api/developers?${params.toString()}`,
       {
-        method: "POST",
-        headers: {
-          "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          requests: [
-            {
-              indexName: "bayut-production-agencies-en",
-              params: `page=0&hitsPerPage=100&query=${encodeURIComponent(
-                query
-              )}&optionalWords=&facets=%5B%5D&maxValuesPerFacet=100&attributesToHighlight=%5B%22name%22%5D&attributesToRetrieve=%5B%22name%22%2C%22stats.adsCount%22%5D&filters=(type%3A%22developer%22)&numericFilters=stats.adsCount%3E%3D1`,
-            },
-          ],
-        }),
+        method: "GET",
+        headers,
       }
     );
 
@@ -699,14 +703,12 @@ export const searchDevelopers = async (query: string = ""): Promise<any[]> => {
 
     const data = await response.json();
 
-    // Process and sort the results
-    const developerOptions = data.results[0].hits
-      .sort((a: any, b: any) => b.stats.adsCount - a.stats.adsCount)
-      .slice(0, 20)
+    // Transform the results to match the expected format
+    const developerOptions = (data.data || [])
       .map((developer: any) => ({
-        value: developer.name,
-        label: developer.name,
-        adsCount: developer.stats.adsCount,
+        value: developer.Developer || developer.name,
+        label: developer.Developer || developer.name,
+        adsCount: developer.properties_sale_count || 0,
       }));
 
     return developerOptions;
@@ -1116,5 +1118,110 @@ export const getLeadMeetings = async (leadId: string) => {
     return meetings;
   } catch (error) {
     throw error;
+  }
+};
+
+
+/**
+ * Log a dialer time tracking session
+ * @param sessionData - Dialer session data including leadId, phoneNumber, duration, etc.
+ * @returns Promise<any> - API response
+ */
+export const logDialerSession = async (sessionData: {
+  leadId: string;
+  phoneNumber: string;
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  transferredToDialer: boolean;
+  platform: string;
+}): Promise<any> => {
+  if (!(await validateAuthToken())) {
+    throw new Error("Authentication failed. Please login again.");
+  }
+
+  try {
+    const headers = await createAuthHeaders();
+    const url = `${process.env.EXPO_PUBLIC_BASE_URL}/api/dialer-session/log`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(sessionData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response
+        .json()
+        .catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(
+        errorData.error || `Failed to log dialer session: HTTP ${response.status}`
+      );
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Get agent call statistics for a date range
+ * @param userId - User ID (optional, defaults to current user)
+ * @param startDate - Start date in YYYY-MM-DD format
+ * @param endDate - End date in YYYY-MM-DD format
+ * @returns Promise<any> - API response with call statistics
+ */
+export const getDialerSessionStats = async (userId: string | null, startDate: string, endDate: string): Promise<any> => {
+  if (!(await validateAuthToken())) {
+    throw new Error("Authentication failed. Please login again.");
+  }
+
+  try {
+    const headers = await createAuthHeaders();
+    
+    // Build query parameters
+    const params = new URLSearchParams({
+      startDate,
+      endDate,
+    });
+    
+    if (userId) {
+      params.append('userId', userId);
+    }
+    
+    const url = `${process.env.EXPO_PUBLIC_BASE_URL}/api/dialer-session/stats?${params.toString()}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers,
+    });
+
+    if (!response.ok) {
+      const errorData = await response
+        .json()
+        .catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(
+        errorData.error || `Failed to get dialer session stats: HTTP ${response.status}`
+      );
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Clear authentication data from secure storage
+ */
+export const clearAuthData = async (): Promise<void> => {
+  try {
+    await SecureStore.deleteItemAsync("userToken");
+    await SecureStore.deleteItemAsync("refreshToken");
+  } catch (error) {
+    console.error("Error clearing auth data:", error);
   }
 };

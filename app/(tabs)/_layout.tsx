@@ -33,7 +33,16 @@ export default function TabLayout() {
           ),
         }}
       />
-        <Tabs.Screen name="location" options={{ href: null }} />
+      <Tabs.Screen
+        name="tasks"
+        options={{
+          title: "Tasks",
+          headerShown: false, // Let the screen handle its own header
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="calendar" size={28} color={color} />
+          ),
+        }}
+      />
         <Tabs.Screen
           name="profile"
           options={{

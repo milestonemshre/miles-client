@@ -9,7 +9,7 @@
       "distribution": "internal",
       "resourceClass": "default",
       "android": {
-        "image": "latest",
+        "image": "ubuntu-22.04-jdk-17-ndk-r21e",
         "buildType": "apk",
         "withoutCredentials": true
       },
@@ -27,7 +27,7 @@
       "channel": "staging",
       "resourceClass": "default",
       "android": {
-        "image": "latest",
+        "image": "ubuntu-22.04-jdk-17-ndk-r21e",
         "buildType": "apk",
         "withoutCredentials": true
       },
@@ -51,7 +51,7 @@
       "channel": "main",
       "resourceClass": "default",
       "android": {
-        "image": "latest",
+        "image": "ubuntu-22.04-jdk-17-ndk-r21e",
         "buildType": "apk",
         "withoutCredentials": true
       },
@@ -68,7 +68,7 @@
       "autoIncrement": true,
       "resourceClass": "default",
       "android": {
-        "image": "latest",
+        "image": "ubuntu-22.04-jdk-17-ndk-r21e",
         "withoutCredentials": false
       },
       "ios": {

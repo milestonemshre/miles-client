@@ -18,12 +18,8 @@ export const COUNT_OPTIONS: FilterOption[] = [
 ];
 
 export const DATE_FOR_OPTIONS = [
-  { value: "LeadIntroduction", label: "Date for lead introduction" },
-  {
-    value: "LeadAssignment",
-    label: "Date for agent assignment to lead",
-    requiresAgentsAndDates: true,
-  },
+  { value: "LeadIntroduction", label: "Lead introduction" },
+  { value: "LastCalled", label: "Last call" },
 ];
 
 /**

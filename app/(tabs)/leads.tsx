@@ -7,6 +7,7 @@ import LeadTypeModal from "@/components/leads/LeadTypeModal";
 import LoadingView from "@/components/LoadingView";
 import MeetingModal from "@/components/MeetingModal";
 import ReminderModal from "@/components/ReminderModal";
+import CallStatusUpdateModal from "@/components/CallStatusUpdateModal";
 
 import { useFilters } from "@/hooks/useFilters";
 import { useLeadsData } from "@/hooks/useLeadsData";
@@ -92,9 +93,7 @@ export default function LeadsPage() {
     tagOptions,
     agents,
     loading,
-    paginationLoading,
     refreshLeads,
-    setPaginationLoading,
   } = useLeadsData({
     user,
     filters,
@@ -125,6 +124,13 @@ export default function LeadsPage() {
     setHeaderDropdownOpen,
   } = useModalManager();
 
+  // Call Status Update Modal state
+  const [showCallStatusUpdateModal, setShowCallStatusUpdateModal] = useState(false);
+  const [callStatusUpdateLead, setCallStatusUpdateLead] = useState<any>(null);
+  const [callStatusUpdateComment, setCallStatusUpdateComment] = useState<string>("");
+  const [callStatusUpdateReminderAdded, setCallStatusUpdateReminderAdded] = useState(false);
+  const [callStatusUpdateMeetingAdded, setCallStatusUpdateMeetingAdded] = useState(false);
+
   const [isExporting, setIsExporting] = useState(false);
   const [statusCountsExpanded, setStatusCountsExpanded] = useState(false);
   const [statusCounts, setStatusCounts] = useState<{
@@ -142,9 +148,18 @@ export default function LeadsPage() {
 
   const userPermissions = useUserPermissions(user);
 
+  // Optimize state updates to prevent flashing between lead sets
   useEffect(() => {
-    setLocalLeads(leads);
-  }, [leads]);
+    // Only update local leads if we have actual data or if it's a reset
+    if (leads.length > 0 || (leads.length === 0 && !loading)) {
+      console.log(`🔄 Updating localLeads: ${leads.length} leads from hook`);
+      console.log(
+        "📋 Local leads update:",
+        leads.map((lead) => ({ id: lead._id, name: lead.Name }))
+      );
+      setLocalLeads(leads);
+    }
+  }, [leads, loading]);
 
   useAgentInitialization({ agents, user, filters, updateFilters });
 
@@ -183,20 +198,23 @@ export default function LeadsPage() {
   };
 
   const handlePageChange = async (newPage: number) => {
-    if (newPage === currentPage || paginationLoading) return;
+    if (newPage === currentPage || loading) return;
 
-    setPaginationLoading(true);
+    console.log(`🔄 Page change: ${currentPage} → ${newPage}`);
+
     setCurrentPage(newPage);
 
     try {
-      await refreshLeads();
+      // Add small delay to prevent rapid API calls
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Delegate fetching to the hook with explicit page
+      await refreshLeads(newPage);
     } catch (error) {
-      console.error(error);
+      console.error(`❌ Page ${newPage} failed:`, error);
       Toast.show("Error loading page", {
         duration: Toast.durations.SHORT,
       });
-    } finally {
-      setPaginationLoading(false);
     }
   };
 
@@ -462,6 +480,50 @@ export default function LeadsPage() {
     [user]
   );
 
+  const openCallStatusUpdateModal = useCallback((lead: any, preSelectedStatusId?: string) => {
+    setCallStatusUpdateLead({
+      ...lead,
+      ...(preSelectedStatusId && {
+        preSelectedStatusId,
+        originalLeadStatusId: lead.LeadStatus?._id, // Store original status
+      })
+    });
+    setCallStatusUpdateComment("");
+    setCallStatusUpdateReminderAdded(false);
+    setCallStatusUpdateMeetingAdded(false);
+    setShowCallStatusUpdateModal(true);
+  }, []);
+
+  const closeCallStatusUpdateModal = useCallback(() => {
+    setShowCallStatusUpdateModal(false);
+    setCallStatusUpdateLead(null);
+    setCallStatusUpdateComment("");
+    setCallStatusUpdateReminderAdded(false);
+    setCallStatusUpdateMeetingAdded(false);
+  }, []);
+
+  const handleCallStatusUpdateReminder = useCallback(() => {
+    if (callStatusUpdateLead) {
+      openReminderModal(callStatusUpdateLead._id, () => {
+        setCallStatusUpdateReminderAdded(true);
+        Toast.show("Reminder added successfully", {
+          duration: Toast.durations.SHORT,
+        });
+      });
+    }
+  }, [callStatusUpdateLead, openReminderModal]);
+
+  const handleCallStatusUpdateMeeting = useCallback(() => {
+    if (callStatusUpdateLead) {
+      openMeetingModal(callStatusUpdateLead._id, () => {
+        setCallStatusUpdateMeetingAdded(true);
+        Toast.show("Meeting scheduled successfully", {
+          duration: Toast.durations.SHORT,
+        });
+      });
+    }
+  }, [callStatusUpdateLead, openMeetingModal]);
+
   const scrollToCard = useCallback((leadId: string) => {
     const cardRef = leadCardRefs.current[leadId];
     const scrollView = scrollViewRef.current;
@@ -557,7 +619,6 @@ export default function LeadsPage() {
         totalPages={totalPages}
         totalLeads={totalLeads}
         leadsPerPage={leadsPerPage}
-        paginationLoading={paginationLoading}
         miles600={miles600}
         onStatusCountsExpandedChange={setStatusCountsExpanded}
         onStatusFilter={handleStatusFilter}
@@ -586,6 +647,7 @@ export default function LeadsPage() {
             if (callback) callback();
           }
         }}
+        onCallStatusUpdateModalOpen={openCallStatusUpdateModal}
         isLeadSelected={isLeadSelected}
         toggleLeadSelection={toggleLeadSelection}
         scrollToCard={scrollToCard}
@@ -680,6 +742,19 @@ export default function LeadsPage() {
         agents={getFlattenedAgents(agents)}
         tagOptions={tagOptions || []}
         currentUser={user}
+      />
+
+      <CallStatusUpdateModal
+        visible={showCallStatusUpdateModal}
+        onClose={closeCallStatusUpdateModal}
+        lead={callStatusUpdateLead}
+        statusOptions={statusOptions}
+        onLeadUpdate={handleLeadUpdate}
+        onReminderPress={handleCallStatusUpdateReminder}
+        onMeetingPress={handleCallStatusUpdateMeeting}
+        reminderAdded={callStatusUpdateReminderAdded}
+        meetingAdded={callStatusUpdateMeetingAdded}
+        onCommentChange={setCallStatusUpdateComment}
       />
     </View>
   );

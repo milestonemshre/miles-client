@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 
 /**
  * Props interface for the Pagination component
@@ -144,15 +144,11 @@ const Pagination: React.FC<PaginationProps> = ({
           onPress={handlePrevious}
           disabled={currentPage === 0 || loading}
         >
-          {loading && currentPage > 0 ? (
-            <ActivityIndicator size="small" color="#6B7280" />
-          ) : (
-            <Ionicons
-              name="chevron-back"
-              size={20}
-              color={currentPage === 0 ? "#D1D5DB" : "#6B7280"}
-            />
-          )}
+          <Ionicons
+            name="chevron-back"
+            size={20}
+            color={currentPage === 0 ? "#D1D5DB" : "#6B7280"}
+          />
         </TouchableOpacity>
 
         {/* Page numbers */}
@@ -206,15 +202,11 @@ const Pagination: React.FC<PaginationProps> = ({
           onPress={handleNext}
           disabled={currentPage === totalPages - 1 || loading}
         >
-          {loading && currentPage < totalPages - 1 ? (
-            <ActivityIndicator size="small" color="#6B7280" />
-          ) : (
-            <Ionicons
-              name="chevron-forward"
-              size={20}
-              color={currentPage === totalPages - 1 ? "#D1D5DB" : "#6B7280"}
-            />
-          )}
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color={currentPage === totalPages - 1 ? "#D1D5DB" : "#6B7280"}
+          />
         </TouchableOpacity>
       </View>
     </View>

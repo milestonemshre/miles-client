@@ -1,13 +1,19 @@
 import LoginPage from "@/components/LoginPage";
+import useLocation from "@/hooks/useLocation";
 import useOneSignal from "@/hooks/useOneSignal";
+// Import background location task to ensure it's registered
+import * as Location from "expo-location";
 import { Stack } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
+import * as TaskManager from "expo-task-manager";
 import { jwtDecode } from "jwt-decode";
 import React, { createContext, useEffect, useState } from "react";
 import { AppState } from "react-native";
 import { RootSiblingParent } from "react-native-root-siblings";
 import "../global.css";
+import "../tasks/backgroundLocationTask";
+import { BACKGROUND_LOCATION_TASK } from "../tasks/backgroundLocationTask";
 
 export const UserContext = createContext<any | null>(null);
 export const LogoutContext = createContext<(() => Promise<void>) | null>(null);
@@ -20,6 +26,9 @@ export default function RootLayout() {
 
   // Initialize OneSignal when user is available
   useOneSignal(user);
+
+  // Get location hook functions
+  const { permissionGranted, requestLocationPermission } = useLocation(user);
 
   // Function to validate stored token and handle logout
   const validateStoredToken = async () => {
@@ -57,9 +66,21 @@ export default function RootLayout() {
   // Function to handle complete logout
   const handleLogout = async () => {
     try {
+      // Stop background location tracking
+      const isRegistered = await TaskManager.isTaskRegisteredAsync(
+        BACKGROUND_LOCATION_TASK
+      );
+      if (isRegistered) {
+        await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+        console.log("Background location task stopped on logout");
+      }
+
       await SecureStore.deleteItemAsync("userToken");
       await SecureStore.deleteItemAsync("refreshToken");
       await SecureStore.deleteItemAsync("user_permissions");
+      await SecureStore.deleteItemAsync("currentUser"); // Clean up stored user for background tasks
+      await SecureStore.deleteItemAsync("lastLocationSentTime"); // Clean up location timing
+      await SecureStore.deleteItemAsync("lastLocationSent"); // Clean up last location
       setToken(null);
       setUser(null);
     } catch (error) {
@@ -77,6 +98,36 @@ export default function RootLayout() {
     };
     initializeApp();
   }, []);
+
+  // Check and request location permission after successful login
+  useEffect(() => {
+    if (user && !permissionGranted) {
+      // Small delay to let the main app render first, then check/request permissions
+      const timer = setTimeout(async () => {
+        try {
+          // First check if we already have permissions
+          const { status: existingStatus } =
+            await Location.getForegroundPermissionsAsync();
+          console.log("Existing foreground permission status:", existingStatus);
+
+          if (existingStatus === "granted") {
+            console.log(
+              "Location permission already granted, will start tracking via hook"
+            );
+            // The hook will handle starting location updates when permission is detected
+          } else {
+            console.log(
+              "Location permission not granted, requesting permission..."
+            );
+            await requestLocationPermission();
+          }
+        } catch (error) {
+          console.warn("Failed to check/request location permission:", error);
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [user, permissionGranted, requestLocationPermission]);
 
   // Listen for app state changes to validate token when app becomes active
   useEffect(() => {

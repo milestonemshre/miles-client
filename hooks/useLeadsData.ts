@@ -7,7 +7,7 @@ import {
   FilterOption,
   FilterOptions,
 } from "@/services/api";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Toast from "react-native-root-toast";
 
 export interface UseLeadsDataProps {
@@ -33,11 +33,10 @@ export interface UseLeadsDataReturn {
 
   // Loading states
   loading: boolean;
-  paginationLoading: boolean;
 
   // Functions
-  refreshLeads: () => Promise<void>;
-  setPaginationLoading: (loading: boolean) => void;
+  refreshLeads: (explicitPage?: number) => Promise<void>;
+  setLeadsManually: (leads: any[], totalLeads?: number) => void;
 }
 
 /**
@@ -65,41 +64,65 @@ export const useLeadsData = ({
 
   // Loading states
   const [loading, setLoading] = useState(true);
-  const [paginationLoading, setPaginationLoading] = useState(false);
+  
+  // Request tracking to prevent race conditions
+  const requestCounterRef = useRef(0);
+  const latestRequestRef = useRef(0);
 
   /**
    * Fetch leads data with current parameters
+   * Allow passing explicit page to avoid stale state issues
    */
-  const refreshLeads = useCallback(async () => {
+  const refreshLeads = useCallback(async (explicitPage?: number) => {
     if (!user || !user.id || !shouldFetchLeads) {
       setLoading(false);
       return;
     }
+    
+    // Increment request counter and track this request
+    requestCounterRef.current += 1;
+    const thisRequestId = requestCounterRef.current;
+    latestRequestRef.current = thisRequestId;
+    
     setLoading(true);
+
+    const pageToUse = explicitPage !== undefined ? explicitPage : currentPage;
 
     try {
       const response = await fetchLeads(user, filters, searchTerm, {
-        page: currentPage,
+        page: pageToUse,
         limit: leadsPerPage,
       });
 
-      setLeads(response.data);
-      setTotalLeads(response.totalLeads);
+      // Only update state if this is still the latest request
+      if (thisRequestId === latestRequestRef.current) {
+        console.log(`🔄 useLeadsData updating: page ${pageToUse}, ${response.data.length} leads`);
+        console.log('📋 Hook leads:', response.data.map(lead => ({ id: lead._id, name: lead.Name })));
+        
+        setLeads(response.data);
+        setTotalLeads(response.totalLeads);
 
-      const calculatedTotalPages = Math.ceil(
-        response.totalLeads / leadsPerPage
-      );
-      setTotalPages(calculatedTotalPages);
+        const calculatedTotalPages = Math.ceil(
+          response.totalLeads / leadsPerPage
+        );
+        setTotalPages(calculatedTotalPages);
+      }
     } catch (error) {
-      Toast.show(`Error fetching leads: ${error.message}`, {
-        duration: Toast.durations.LONG,
-      });
-      setLeads([]);
-      setTotalLeads(0);
-      setTotalPages(0);
+      // Only show error if this is still the latest request
+      if (thisRequestId === latestRequestRef.current) {
+        Toast.show(`Error fetching leads: ${error.message}`, {
+          duration: Toast.durations.LONG,
+        });
+        setLeads([]);
+        setTotalLeads(0);
+        setTotalPages(0);
+      }
     }
 
-    setLoading(false);
+    // Only update loading state if this is still the latest request
+    if (thisRequestId === latestRequestRef.current) {
+      setLoading(false);
+    }
   }, [user, filters, searchTerm, currentPage, leadsPerPage, shouldFetchLeads]);
 
   /**
@@ -137,11 +160,24 @@ export const useLeadsData = ({
   }, [user, loadFilterOptions]);
 
   // Fetch leads when user and shouldFetchLeads conditions are met
+  // Exclude currentPage to prevent conflicts with manual pagination
   useEffect(() => {
     if (user && user.id && shouldFetchLeads) {
+      console.log(`🔄 useLeadsData effect triggered by filters/search change`);
       refreshLeads();
     }
-  }, [user, shouldFetchLeads, refreshLeads]);
+  }, [user?.id, shouldFetchLeads, filters, searchTerm, leadsPerPage]);
+
+  // Allow manual setting of leads data to prevent conflicts
+  const setLeadsManually = useCallback((newLeads: any[], newTotalLeads?: number) => {
+    console.log(`🔧 Manually setting ${newLeads.length} leads in hook`);
+    setLeads(newLeads);
+    if (newTotalLeads !== undefined) {
+      setTotalLeads(newTotalLeads);
+      const calculatedTotalPages = Math.ceil(newTotalLeads / leadsPerPage);
+      setTotalPages(calculatedTotalPages);
+    }
+  }, [leadsPerPage]);
 
   return {
     // Data
@@ -157,10 +193,9 @@ export const useLeadsData = ({
 
     // Loading states
     loading,
-    paginationLoading,
 
     // Functions
     refreshLeads,
-    setPaginationLoading,
+    setLeadsManually,
   };
 };

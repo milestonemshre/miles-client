@@ -40,6 +40,7 @@ interface ReminderModalProps {
   assigneesOptions?: User[];
   onSuccess?: () => void;
   reminderToEdit?: any;
+  initialComment?: string;
 }
 
 // Helper function to get timezone offset string
@@ -60,6 +61,7 @@ const ReminderModal: React.FC<ReminderModalProps> = ({
   assigneesOptions = [],
   onSuccess,
   reminderToEdit = null,
+  initialComment = "",
 }) => {
   const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -112,7 +114,7 @@ const ReminderModal: React.FC<ReminderModalProps> = ({
         DateTime: "",
         Assignees: "",
         Leadid: leadId,
-        Comment: "",
+        Comment: initialComment,
         notifyBefore: {
           time: 0,
           unit: "minutes",
@@ -145,7 +147,7 @@ const ReminderModal: React.FC<ReminderModalProps> = ({
         setShowUnitSelect(false);
       }
     };
-  }, [reminderToEdit, leadId, visible]);
+  }, [reminderToEdit, leadId, visible, initialComment]);
 
   const updateDateTime = () => {
     // Combine date and time

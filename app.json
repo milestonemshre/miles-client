@@ -20,7 +20,13 @@
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "UIBackgroundModes": ["fetch"]
+        "UIBackgroundModes": ["fetch", "location"]
+      },
+      "entitlements": {
+        "aps-environment": "development",
+        "com.apple.security.application-groups": [
+          "group.${ios.bundleIdentifier}.onesignal"
+        ]
       }
     },
     "android": {
@@ -34,8 +40,10 @@
         "ACCESS_WIFI_STATE",
         "ACCESS_BACKGROUND_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
-        "NOTIFICATIONS",
-        "WRITE_EXTERNAL_STORAGE"
+        "POST_NOTIFICATIONS",
+        "WRITE_EXTERNAL_STORAGE",
+        "WAKE_LOCK",
+        "VIBRATE"
       ],
       "package": "com.mujeorg.milesclient",
       "versionCode": 1
@@ -44,6 +52,7 @@
       "expo-notifications",
       "expo-router",
       "expo-secure-store",
+      "expo-task-manager",
       [
         "expo-location",
         {
@@ -55,7 +64,7 @@
       [
         "onesignal-expo-plugin",
         {
-          "mode": "production"
+          "mode": "development"
         }
       ]
     ],
@@ -66,7 +75,7 @@
       "eas": {
         "projectId": "75bb3ac1-a958-44c2-989e-6084b19f60ee"
       },
-      "oneSignalAppId": "7a7f495d-a3ba-45b4-aa8e-37bf796e6bc4"
+      "oneSignalAppId": "d1134921-c416-419e-a0a7-0c98e2640e2a"
     },
     "owner": "muje-org",
     "updates": {

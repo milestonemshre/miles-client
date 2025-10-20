@@ -33,7 +33,6 @@ interface LeadsContentProps {
   totalPages: number;
   totalLeads: number;
   leadsPerPage: number;
-  paginationLoading: boolean;
   miles600: string;
   onStatusCountsExpandedChange: (expanded: boolean) => void;
   onStatusFilter: (statusId: string) => void;
@@ -41,6 +40,7 @@ interface LeadsContentProps {
   onLeadUpdate: (leadId: string, updates: any) => Promise<void>;
   onPageChange: (page: number) => void;
   onModalOpen: (type: string, leadId: string, callback: () => void) => void;
+  onCallStatusUpdateModalOpen?: (lead: any, preSelectedStatusId?: string) => void;
   isLeadSelected: (lead: any) => boolean;
   toggleLeadSelection: (lead: any) => void;
   scrollToCard: (leadId: string) => void;
@@ -68,14 +68,13 @@ export default function LeadsContent({
   totalPages,
   totalLeads,
   leadsPerPage,
-  paginationLoading,
-  miles600,
   onStatusCountsExpandedChange,
   onStatusFilter,
   onClearStatusFilter,
   onLeadUpdate,
   onPageChange,
   onModalOpen,
+  onCallStatusUpdateModalOpen,
   isLeadSelected,
   toggleLeadSelection,
   scrollToCard,
@@ -169,6 +168,7 @@ export default function LeadsContent({
                 onOpenModal={(type, callback) => {
                   onModalOpen(type, lead._id, callback);
                 }}
+                onCallStatusUpdateModalOpen={(preSelectedStatusId) => onCallStatusUpdateModalOpen?.(lead, preSelectedStatusId)}
               />
             </View>
           ))}
@@ -180,7 +180,7 @@ export default function LeadsContent({
             totalItems={totalLeads}
             itemsPerPage={leadsPerPage}
             onPageChange={onPageChange}
-            loading={paginationLoading}
+            loading={loading}
           />
         </View>
       </ScrollView>

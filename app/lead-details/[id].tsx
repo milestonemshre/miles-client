@@ -9,8 +9,6 @@ import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
-  AppState,
-  AppStateStatus,
   Linking,
   Platform,
   SafeAreaView,
@@ -19,11 +17,21 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Toast from "react-native-root-toast";
+import CallStatusUpdateModal from "../../components/CallStatusUpdateModal";
 import CommentsTab from "../../components/leadDetails/CommentsTab";
 import MeetingsTab from "../../components/leadDetails/MeetingsTab";
 import ProfileTab from "../../components/leadDetails/ProfileTab";
 import RemindersTab from "../../components/leadDetails/RemindersTab";
-import { fetchLeadById } from "../../services/api";
+import MeetingModal from "../../components/MeetingModal";
+import ReminderModal from "../../components/ReminderModal";
+import { useDialerTimeTracking } from "../../hooks/useDialerTimeTracking";
+import {
+  fetchLeadById,
+  fetchStatusOptions,
+  getUsers,
+  logDialerSession,
+} from "../../services/api";
 
 interface Lead {
   _id: string;
@@ -50,9 +58,9 @@ interface Lead {
     username: string;
     Avatar?: string;
   };
-  tags?: Array<{
+  tags?: {
     Tag: string;
-  }>;
+  }[];
   timestamp?: string;
   LeadAssignedDate?: string;
   dynamicFields?: Record<string, any>;
@@ -82,15 +90,103 @@ export default function LeadDetailsPage() {
   const [currentLeadIndex, setCurrentLeadIndex] = useState(-1);
   const [loadingNavigation, setLoadingNavigation] = useState(false);
 
+  // Call status update modal state
+  const [showCallStatusModal, setShowCallStatusModal] = useState(false);
+  const [statusOptions, setStatusOptions] = useState<
+    {
+      value: string;
+      label: string;
+      color: string;
+      requiresReminder?: "yes" | "no" | "optional";
+    }[]
+  >([]);
+
+  // Reminder modal state
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [reminderLeadId, setReminderLeadId] = useState<string | null>(null);
+  const [users, setUsers] = useState<any[]>([]);
+
+  // Meeting modal state
+  const [showMeetingModal, setShowMeetingModal] = useState(false);
+  const [meetingLeadId, setMeetingLeadId] = useState<string | null>(null);
+
+  // Track reminder/meeting completion for current call status update
+  const [callReminderAdded, setCallReminderAdded] = useState(false);
+  const [callMeetingAdded, setCallMeetingAdded] = useState(false);
+  const [callComment, setCallComment] = useState("");
+
   const permissions = getUserPermissions();
 
-  // Call tracking refs
-  const callSessionRef = React.useRef<{
-    id: string;
-    startedAt: number;
-    phone: string;
-  } | null>(null);
-  const appStateRef = React.useRef<AppStateStatus>(AppState.currentState);
+  // Dialer time tracking
+  const dialerTimeTracking = useDialerTimeTracking({
+    leadId: lead?._id,
+    phoneNumber: lead?.Phone || lead?.AltPhone,
+    onSessionComplete: async (session) => {
+      console.log("📞 Dialer session completed:", {
+        sessionId: session.id,
+        leadId: session.leadId,
+        durationSeconds: session.durationSeconds,
+        durationFormatted: session.durationSeconds
+          ? `${Math.floor(session.durationSeconds / 60)}m ${
+              session.durationSeconds % 60
+            }s`
+          : "0s",
+        transferredToDialer: session.transferredToDialer,
+        phoneNumber: session.phoneNumber,
+        startTime: new Date(session.startedAt).toLocaleTimeString(),
+        endTime: session.endedAt
+          ? new Date(session.endedAt).toLocaleTimeString()
+          : "N/A",
+      });
+
+      // Log dialer session to API if duration is valid
+      if (
+        session.endedAt &&
+        session.durationSeconds &&
+        session.durationSeconds > 0
+      ) {
+        try {
+          const result = await logDialerSession({
+            leadId: session.leadId,
+            phoneNumber: session.phoneNumber,
+            startedAt: new Date(session.startedAt).toISOString(),
+            endedAt: new Date(session.endedAt).toISOString(),
+            durationSeconds: session.durationSeconds,
+            transferredToDialer: session.transferredToDialer,
+            platform: Platform.OS,
+          });
+          console.log("✅ Dialer session logged to backend:", result.sessionId);
+        } catch (error) {
+          console.warn("❌ Failed to log dialer session:", error);
+        }
+      } else {
+        console.log(
+          "⚠️ Skipping dialer session log - invalid duration:",
+          session.durationSeconds
+        );
+      }
+    },
+    onTransferToDialer: (session) => {
+      console.log("User transferred to dialer:", session.id);
+    },
+    onReturnFromDialer: (session) => {
+      console.log("User returned from dialer - Session details:", {
+        sessionId: session.id,
+        totalDuration: dialerTimeTracking.getCurrentDuration(),
+        transferredToDialer: session.transferredToDialer,
+      });
+
+      // Show call status modal after returning from dialer
+      setTimeout(() => {
+        setCallReminderAdded(false);
+        setCallMeetingAdded(false);
+        setCallComment("");
+        setShowCallStatusModal(true);
+      }, 500);
+
+      // Don't end session immediately - wait for user to complete the call workflow
+    },
+  });
 
   // If we navigated here via Start Calling without a specific lead id, resolve the first lead and replace route
   useEffect(() => {
@@ -121,7 +217,7 @@ export default function LeadDetailsPage() {
             campaignName,
           },
         });
-      } catch (e) {
+      } catch {
         setError("Failed to start calling");
       } finally {
         setLoading(true); // keep showing loading until replaced
@@ -214,6 +310,24 @@ export default function LeadDetailsPage() {
     navigateToNextLead,
   ]);
 
+  // Load status options and users
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [options, usersData] = await Promise.all([
+          fetchStatusOptions(),
+          getUsers(),
+        ]);
+        setStatusOptions(options);
+        setUsers(usersData);
+      } catch (error) {
+        console.error("Failed to load data:", error);
+      }
+    };
+
+    loadData();
+  }, []);
+
   useEffect(() => {
     if (!id) return;
     if (startingFromAuto) return; // wait for auto-resolution to replace with actual lead id
@@ -240,7 +354,7 @@ export default function LeadDetailsPage() {
     };
 
     fetchLead();
-  }, [id, fromCalling, loadCampaignLeads]);
+  }, [id, fromCalling, loadCampaignLeads, startingFromAuto]);
 
   // Prefetch next lead details whenever current lead or index changes
   useEffect(() => {
@@ -253,8 +367,21 @@ export default function LeadDetailsPage() {
     fetchLeadById(nextId).catch(() => {});
   }, [lead, currentLeadIndex, campaignLeads]);
 
-  const handleLeadUpdate = (updatedLead: Lead) => {
-    setLead(updatedLead);
+  const handleLeadUpdate = async () => {
+    // Refetch the lead data to ensure we have the latest information
+    try {
+      const leadData = await fetchLeadById(id);
+      setLead(leadData);
+
+      // End dialer session when user completes lead update
+      // This ensures we only log calls that resulted in actual user engagement
+      if (dialerTimeTracking.isSessionActive) {
+        console.log("📞 Ending dialer session after successful lead update");
+        dialerTimeTracking.endDialerSession();
+      }
+    } catch (error) {
+      console.error("Failed to refresh lead data:", error);
+    }
   };
 
   // Action button handlers
@@ -265,17 +392,19 @@ export default function LeadDetailsPage() {
       return;
     }
 
-    // Create a session id and capture start time
-    const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    callSessionRef.current = {
-      id: sessionId,
-      startedAt: Date.now(),
-      phone: String(phoneNumber),
-    };
+    if (!lead?._id) {
+      Alert.alert("Error", "Lead ID is missing.");
+      return;
+    }
+
+    // Start dialer time tracking session
+    dialerTimeTracking.startDialerSession(lead._id, String(phoneNumber));
 
     const url = `tel:${phoneNumber}`;
     Linking.openURL(url).catch(() => {
       Alert.alert("Error", "Unable to make phone call");
+      // End tracking session if call failed
+      dialerTimeTracking.endDialerSession();
     });
   };
 
@@ -342,47 +471,53 @@ export default function LeadDetailsPage() {
     });
   };
 
-  // AppState listener to detect when returning from phone UI and log basic call stats
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", async (nextState) => {
-      const prev = appStateRef.current;
-      appStateRef.current = nextState;
+  // Old AppState listener removed - now using improved dialer session tracking
 
-      // When coming back to active from background/inactive, finalize a call session if any
-      if (
-        (prev === "background" || prev === "inactive") &&
-        nextState === "active"
-      ) {
-        const session = callSessionRef.current;
-        if (session && lead?._id) {
-          const endedAt = Date.now();
-          const durationSec = Math.max(
-            0,
-            Math.round((endedAt - session.startedAt) / 1000)
-          );
+  // Reminder modal handlers
+  const openReminderModal = useCallback((leadId: string) => {
+    setReminderLeadId(leadId);
+    setShowReminderModal(true);
+  }, []);
 
-          try {
-            await logCall({
-              leadId: lead._id,
-              phoneNumber: session.phone,
-              platform: Platform.OS,
-              sessionId: session.id,
-              startedAt: new Date(session.startedAt).toISOString(),
-              endedAt: new Date(endedAt).toISOString(),
-              durationSeconds: durationSec,
-            });
-          } catch (e) {
-            // non-fatal
-            console.warn("Failed to log call:", e);
-          } finally {
-            callSessionRef.current = null;
-          }
-        }
-      }
+  const closeReminderModal = useCallback(() => {
+    setReminderLeadId(null);
+    setShowReminderModal(false);
+  }, []);
+
+  const handleReminderSuccess = useCallback(() => {
+    Toast.show("Reminder added successfully", {
+      duration: Toast.durations.SHORT,
     });
+    setCallReminderAdded(true);
+    closeReminderModal();
+    // Refresh lead data or show success message
+    if (lead) {
+      // Optionally refresh lead data here
+    }
+  }, [lead, closeReminderModal]);
 
-    return () => sub.remove();
-  }, [lead?._id]);
+  // Meeting modal handlers
+  const openMeetingModal = useCallback((leadId: string) => {
+    setMeetingLeadId(leadId);
+    setShowMeetingModal(true);
+  }, []);
+
+  const closeMeetingModal = useCallback(() => {
+    setMeetingLeadId(null);
+    setShowMeetingModal(false);
+  }, []);
+
+  const handleMeetingSuccess = useCallback(() => {
+    Toast.show("Meeting scheduled successfully", {
+      duration: Toast.durations.SHORT,
+    });
+    setCallMeetingAdded(true);
+    closeMeetingModal();
+    // Refresh lead data or show success message
+    if (lead) {
+      // Optionally refresh lead data here
+    }
+  }, [lead, closeMeetingModal]);
 
   const handleEmail = () => {
     const email = lead?.Email;
@@ -544,6 +679,55 @@ export default function LeadDetailsPage() {
 
       {/* Tab Content */}
       <View className="flex-1">{renderTabContent()}</View>
+
+      {/* Call Status Update Modal */}
+      <CallStatusUpdateModal
+        visible={showCallStatusModal}
+        onClose={() => {
+          setCallReminderAdded(false);
+          setCallMeetingAdded(false);
+          setCallComment("");
+          setShowCallStatusModal(false);
+          // Note: Dialer session will only end if user actually updated the lead
+        }}
+        lead={lead}
+        statusOptions={statusOptions}
+        onLeadUpdate={handleLeadUpdate}
+        onReminderPress={() => {
+          if (lead) {
+            openReminderModal(lead._id);
+          }
+        }}
+        onMeetingPress={() => {
+          if (lead) {
+            openMeetingModal(lead._id);
+          }
+        }}
+        reminderAdded={callReminderAdded}
+        meetingAdded={callMeetingAdded}
+        onCommentChange={setCallComment}
+      />
+
+      {/* Reminder Modal */}
+      <ReminderModal
+        visible={showReminderModal}
+        onClose={closeReminderModal}
+        leadId={reminderLeadId || ""}
+        assigneesOptions={users}
+        onSuccess={handleReminderSuccess}
+        initialComment={callComment}
+      />
+
+      {/* Meeting Modal */}
+      <MeetingModal
+        visible={showMeetingModal}
+        onClose={closeMeetingModal}
+        leadId={meetingLeadId || ""}
+        assigneeOptions={users}
+        statusOptions={statusOptions}
+        onSuccess={handleMeetingSuccess}
+        initialComment={callComment}
+      />
     </SafeAreaView>
   );
 }

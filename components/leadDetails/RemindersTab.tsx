@@ -74,20 +74,42 @@ const RemindersTab: React.FC<RemindersTabProps> = ({ lead }) => {
   };
 
   const formatDateTime = (dateTime: string) => {
-    const date = new Date(dateTime);
-    return {
-      date: date.toLocaleDateString([], {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-      time: date.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      }),
-    };
+    if (!dateTime) {
+      return {
+        date: "Not set",
+        time: "Not set"
+      };
+    }
+    
+    try {
+      const date = new Date(dateTime);
+      if (isNaN(date.getTime())) {
+        return {
+          date: "Invalid date",
+          time: "Invalid time"
+        };
+      }
+      
+      return {
+        date: date.toLocaleDateString([], {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }),
+        time: date.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }),
+      };
+    } catch (error) {
+      console.warn('Date formatting error in RemindersTab:', error, 'Value:', dateTime);
+      return {
+        date: "Invalid date",
+        time: "Invalid time"
+      };
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -184,7 +206,14 @@ const RemindersTab: React.FC<RemindersTabProps> = ({ lead }) => {
             className="mr-1"
           />
           <Text className="text-xs text-gray-500">
-            Created: {new Date(reminder.timestamp).toLocaleDateString()}
+            Created: {reminder.timestamp ? (() => {
+              try {
+                const date = new Date(reminder.timestamp);
+                return isNaN(date.getTime()) ? "Invalid date" : date.toLocaleDateString();
+              } catch (error) {
+                return "Invalid date";
+              }
+            })() : "Not set"}
           </Text>
         </View>
       </View>

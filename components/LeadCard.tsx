@@ -1,14 +1,11 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Alert, Linking, Text, TouchableOpacity, View } from "react-native";
 import Animated, { SlideInDown, SlideOutUp } from "react-native-reanimated";
-import Toast from "react-native-root-toast";
 import { formatPhoneNumber, formatTimestamp } from "../utils/dateFormatter";
 import AuthenticatedImage from "./AuthenticatedImage";
-import SourcePicker from "./SourcePicker";
 import StatusPicker from "./StatusPicker";
-import UpdateDescriptionInput from "./UpdateDescriptionInput";
 
 interface Lead {
   _id: string;
@@ -62,6 +59,7 @@ interface LeadCardProps {
     lead?: string[];
   };
   onOpenModal?: (type: string, callback?: () => void) => void;
+  onCallStatusUpdateModalOpen?: (preSelectedStatusId?: string) => void;
   scrollToCard?: (leadId: string) => void;
 }
 
@@ -71,27 +69,16 @@ const LeadCard: React.FC<LeadCardProps> = ({
   selected = false,
   onCardPress,
   statusOptions = [],
-  sourceOptions = [],
-  onLeadUpdate,
+
   userPermissions,
-  onOpenModal,
-  scrollToCard,
+  onCallStatusUpdateModalOpen,
 }) => {
   const [showContact, setShowContact] = useState(false);
-  const [showCommentInput, setShowCommentInput] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [updateBody, setUpdateBody] = useState<any>({});
-  const [reminderAddedForRequiredStatus, setReminderAddedForRequiredStatus] =
-    useState(false);
 
-  useEffect(() => {
-    setUpdateBody({
-      updateDescription: "",
-      originalLeadStatus: lead.LeadStatus,
-    });
-    setShowCommentInput(false);
-  }, [lead]);
+  const canUpdateStatus =
+    userPermissions?.lead?.includes("update_status") ?? true;
 
   const handlePhoneCall = (phoneNumber: string) => {
     if (!phoneNumber || phoneNumber.startsWith("***")) {
@@ -125,223 +112,15 @@ const LeadCard: React.FC<LeadCardProps> = ({
     );
   };
 
-  const canUpdateStatus =
-    userPermissions?.lead?.includes("update_status") ?? true;
-  const canUpdateSource =
-    userPermissions?.lead?.includes("update_source") ?? true;
-
-  // Status and source pickers are now properly populated with options
-
   const handleStatusChange = (value: string, option: any) => {
-    setUpdateBody({
-      ...updateBody,
-      LeadStatus: {
-        ...lead.LeadStatus,
-        _id: option.value,
-        Status: option.label,
-        color: option.color,
-      },
-      originalLeadStatus: lead.LeadStatus,
-    });
-
-    // Reset reminder flag when status changes
-    setReminderAddedForRequiredStatus(false);
-
-    // Automatically open comment input when status changes
-    if (option.value !== lead.LeadStatus?._id) {
-      setShowCommentInput(true);
-      setShowContact(false);
-      // Scroll to this card when comment input opens due to status change
-      if (scrollToCard) {
-        setTimeout(() => {
-          scrollToCard(lead._id);
-        }, 400);
-      }
+    // Open the CallStatusUpdateModal for status changes to handle reminders, meetings, and validation
+    if (onCallStatusUpdateModalOpen) {
+      onCallStatusUpdateModalOpen(option.value);
     }
-  };
-
-  const handleSourceChange = (value: string, option: any) => {
-    setUpdateBody({
-      ...updateBody,
-      Source: {
-        ...lead.Source,
-        _id: option.value,
-        Source: option.label,
-      },
-    });
-
-    // Show comment input when source changes
-    if (option.value !== lead.Source?._id) {
-      setShowCommentInput(true);
-      setShowContact(false);
-      // Scroll to this card when comment input opens due to source change
-      if (scrollToCard) {
-        setTimeout(() => {
-          scrollToCard(lead._id);
-        }, 400);
-      }
-    }
-  };
-
-  const handleUpdateSubmit = async () => {
-    try {
-      setLoading(true);
-      const statusChanged =
-        updateBody?.LeadStatus &&
-        updateBody?.LeadStatus?._id !== lead.LeadStatus?._id;
-      const description = updateBody?.updateDescription || "";
-      const wordCount = description.trim().split(/\s+/).length;
-
-      // Get the status label for the new status
-      const newStatusLabel = statusOptions.find(
-        (o) => o.value === updateBody.LeadStatus?._id
-      )?.label;
-
-      // List of statuses that don't require description
-      const noDescriptionStatuses = ["RNR"];
-
-      if (
-        statusChanged &&
-        wordCount < 3 &&
-        !noDescriptionStatuses.includes(newStatusLabel || "")
-      ) {
-        Toast.show("Description must exceed 2 words on status change.", {
-          duration: Toast.durations.LONG,
-          position: Toast.positions.BOTTOM,
-          backgroundColor: "#EF4444",
-          textColor: "#FFFFFF",
-          shadow: true,
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Check if status is being changed to "Meeting"
-      if (
-        statusChanged &&
-        updateBody.LeadStatus?._id ===
-          statusOptions.find((o) => o.label === "Meeting")?.value
-      ) {
-        // Open meeting modal
-        onOpenModal?.("Add Meeting", () => updateLead());
-        return;
-      }
-
-      // Handle requiresReminder logic based on the new status
-      const newStatus = statusOptions.find(
-        (o) => o.value === updateBody.LeadStatus?._id
-      );
-      if (statusChanged && newStatus?.requiresReminder) {
-        if (newStatus.requiresReminder === "yes") {
-          // Directly open reminder modal for required reminders
-          onOpenModal?.("Add Reminder", () => {
-            setReminderAddedForRequiredStatus(true);
-            // Don't auto-update, let user submit again after reminder is added
-          });
-          return;
-        } else if (newStatus.requiresReminder === "optional") {
-          // For optional reminders, ensure comment input is shown with reminder button
-          if (!showCommentInput) {
-            setShowCommentInput(true);
-            setLoading(false);
-            return;
-          }
-          // If comment input is already shown and user submitted, proceed with update
-        }
-      }
-
-      // Check if status is being changed to "Closure"
-      const isChangingToClosure =
-        statusChanged &&
-        statusOptions.find((o) => o.value === updateBody.LeadStatus?._id)
-          ?.label === "Closure";
-
-      await updateLead();
-
-      // If status was changed to Closure, show success message
-      if (isChangingToClosure)
-        Alert.alert(
-          "Success",
-          "Lead status changed to Closure. You can now create a deal from this lead."
-        );
-    } catch (e: any) {
-      console.error(e);
-      Alert.alert(
-        "Error",
-        `An error occurred while updating the lead: ${e.message}`
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateLead = async () => {
-    if (!onLeadUpdate) return;
-
-    const payload = {
-      ...updateBody,
-    };
-
-    await onLeadUpdate(lead._id, payload);
-
-    // Reset UI state after successful update
-    setShowCommentInput(false);
-    setUpdateBody({
-      updateDescription: "",
-      originalLeadStatus: lead.LeadStatus,
-    });
-  };
-
-  const handleDescriptionChange = (description: string) => {
-    setUpdateBody((prevBody: any) => ({
-      ...prevBody,
-      updateDescription: description,
-    }));
   };
 
   const toggleContactInfo = () => {
     setShowContact(!showContact);
-    if (!showContact) {
-      setShowCommentInput(false);
-    }
-  };
-
-  const toggleCommentInput = () => {
-    const wasClosedBefore = !showCommentInput;
-    setShowCommentInput(!showCommentInput);
-    if (!showCommentInput) {
-      setShowContact(false);
-      // Scroll to this card when comment input opens
-      if (scrollToCard) {
-        // Use setTimeout to ensure the animation and layout have settled
-        setTimeout(() => {
-          scrollToCard(lead._id);
-        }, 400);
-      }
-    }
-  };
-
-  const handleReminderPress = () => {
-    const isStatusChange =
-      updateBody?.LeadStatus &&
-      updateBody.originalLeadStatus &&
-      updateBody.LeadStatus._id !== updateBody.originalLeadStatus._id;
-
-    const newStatus = statusOptions.find(
-      (s) => s.value === updateBody?.LeadStatus?._id
-    );
-    const isRequiredReminder =
-      isStatusChange && newStatus?.requiresReminder === "yes";
-
-    if (isRequiredReminder) {
-      // For required reminders, auto-update lead after reminder is saved
-      onOpenModal?.("Add Reminder", () => updateLead());
-    } else {
-      // For optional reminders, just open modal without auto-updating lead
-      onOpenModal?.("Add Reminder", () => {
-        Alert.alert("Success", "Reminder added successfully");
-      });
-    }
   };
 
   return (
@@ -435,12 +214,10 @@ const LeadCard: React.FC<LeadCardProps> = ({
             </Text>
             <View onStartShouldSetResponder={() => true}>
               <StatusPicker
-                value={
-                  updateBody?.LeadStatus?._id || lead.LeadStatus?._id || ""
-                }
+                value={lead.LeadStatus?._id || ""}
                 options={statusOptions}
                 onValueChange={handleStatusChange}
-                disabled={!canUpdateStatus}
+                disabled={!canUpdateStatus || loading}
               />
             </View>
           </View>
@@ -449,13 +226,10 @@ const LeadCard: React.FC<LeadCardProps> = ({
             <Text className="text-xs font-medium text-gray-500 mb-1">
               Source:
             </Text>
-            <View onStartShouldSetResponder={() => true}>
-              <SourcePicker
-                value={updateBody?.Source?._id || lead.Source?._id || ""}
-                options={sourceOptions}
-                onValueChange={handleSourceChange}
-                disabled={!canUpdateSource}
-              />
+            <View className="bg-gray-50 border border-gray-300 rounded-lg p-3">
+              <Text className="text-sm font-medium text-gray-700">
+                {lead.Source?.Source || "No Source"}
+              </Text>
             </View>
           </View>
         </View>
@@ -537,11 +311,11 @@ const LeadCard: React.FC<LeadCardProps> = ({
 
         <TouchableOpacity
           className="flex-1 flex-row justify-center items-center py-2.5"
-          onPress={toggleCommentInput}
+          onPress={() => onCallStatusUpdateModalOpen?.()}
         >
-          <Ionicons name="chatbubble" size={18} color="#6B7280" />
+          <Ionicons name="create-outline" size={18} color="#6B7280" />
           <Text className="ml-1.5 text-gray-500 text-sm font-medium">
-            Comment
+            Update
           </Text>
         </TouchableOpacity>
 
@@ -682,40 +456,6 @@ const LeadCard: React.FC<LeadCardProps> = ({
               </TouchableOpacity>
             )}
           </View>
-        </Animated.View>
-      )}
-
-      {/* Update Description Input */}
-      {showCommentInput && (
-        <Animated.View
-          entering={SlideInDown.duration(300)}
-          exiting={SlideOutUp.duration(300)}
-          className="border-t border-gray-200"
-        >
-          <UpdateDescriptionInput
-            isUpdateDescriptionInput={showCommentInput}
-            loading={loading}
-            onDescriptionChange={handleDescriptionChange}
-            onSubmit={handleUpdateSubmit}
-            onReminderPress={handleReminderPress}
-            showReminderButton={
-              // Show for non-status changes (regular comments)
-              !updateBody?.LeadStatus ||
-              (updateBody.LeadStatus && !updateBody.originalLeadStatus) ||
-              (updateBody.LeadStatus &&
-                updateBody.originalLeadStatus &&
-                updateBody.LeadStatus._id ===
-                  updateBody.originalLeadStatus._id) ||
-              // Show for status changes with requiresReminder: 'optional'
-              (updateBody?.LeadStatus &&
-                updateBody.originalLeadStatus &&
-                updateBody.LeadStatus._id !==
-                  updateBody.originalLeadStatus._id &&
-                statusOptions &&
-                statusOptions.find((s) => s.value === updateBody.LeadStatus._id)
-                  ?.requiresReminder === "optional")
-            }
-          />
         </Animated.View>
       )}
     </View>

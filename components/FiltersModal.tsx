@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useState } from "react";
 import {
   Modal,
@@ -11,6 +12,7 @@ import {
 } from "react-native";
 import MultiSelectModal from "./MultiSelectModal";
 import TreeSelect from "./TreeSelect";
+import { DATE_FOR_OPTIONS } from "@/utils/constants";
 
 interface FilterOption {
   value: string;
@@ -67,20 +69,15 @@ export default function FiltersModal({
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
-  const dateForOptions = [
-    { value: "LeadIntroduction", label: "Date for lead introduction" },
-    {
-      value: "LeadAssignment",
-      label: "Date for agent assignment to lead",
-      disabled:
-        localFilters.selectedAgents.length === 0 ||
-        !localFilters.dateRange[0] ||
-        !localFilters.dateRange[1],
-    },
-  ];
+  const dateForOptions = DATE_FOR_OPTIONS;
 
   useEffect(() => {
-    setLocalFilters(filters);
+    // Normalize incoming filters to supported dateFor values
+    const allowed = new Set(DATE_FOR_OPTIONS.map((o) => o.value));
+    const normalized = allowed.has(filters.dateFor)
+      ? filters
+      : { ...filters, dateFor: DATE_FOR_OPTIONS[0].value };
+    setLocalFilters(normalized);
   }, [filters]);
 
   const handleApplyFilters = () => {
@@ -116,32 +113,6 @@ export default function FiltersModal({
         [field]: newArray,
       };
     });
-  };
-
-  const handleDateChange = (
-    event: any,
-    selectedDate: Date | undefined,
-    isStartDate: boolean
-  ) => {
-    if (Platform.OS === "android") {
-      setShowStartDatePicker(false);
-      setShowEndDatePicker(false);
-    }
-
-    if (selectedDate) {
-      setLocalFilters((prev) => {
-        const newRange: [Date | null, Date | null] = [...prev.dateRange];
-        if (isStartDate) {
-          newRange[0] = selectedDate;
-        } else {
-          newRange[1] = selectedDate;
-        }
-        return {
-          ...prev,
-          dateRange: newRange,
-        };
-      });
-    }
   };
 
   const FilterSection = ({
@@ -323,57 +294,46 @@ export default function FiltersModal({
             />
           </View>
 
-          {/* Date Range - Simplified for now */}
+          {/* Date Range */}
           <View className="mb-6">
             <Text className="text-base font-semibold text-gray-700 mb-3">
               Date Range
             </Text>
             <View className="flex-row gap-3">
+              {/* Start Date */}
               <View className="flex-1">
                 <Text className="text-sm font-medium text-gray-700 mb-1">
                   Start Date:
                 </Text>
-                <TextInput
-                  className="bg-white border border-gray-300 rounded-lg p-3 text-base"
-                  placeholder="DD/MM/YYYY"
-                  value={
-                    localFilters.dateRange[0]
+                <TouchableOpacity
+                  className="bg-white border border-gray-300 rounded-lg p-3 flex-row items-center justify-between"
+                  onPress={() => setShowStartDatePicker(true)}
+                >
+                  <Text className="text-base text-gray-900">
+                    {localFilters.dateRange[0]
                       ? localFilters.dateRange[0].toLocaleDateString()
-                      : ""
-                  }
-                  onChangeText={(text) => {
-                    const date = text ? new Date(text) : null;
-                    if (date && !isNaN(date.getTime())) {
-                      setLocalFilters((prev) => ({
-                        ...prev,
-                        dateRange: [date, prev.dateRange[1]],
-                      }));
-                    }
-                  }}
-                />
+                      : "Select start date"}
+                  </Text>
+                  <Ionicons name="calendar" size={16} color="#6B7280" />
+                </TouchableOpacity>
               </View>
+
+              {/* End Date */}
               <View className="flex-1">
                 <Text className="text-sm font-medium text-gray-700 mb-1">
                   End Date:
                 </Text>
-                <TextInput
-                  className="bg-white border border-gray-300 rounded-lg p-3 text-base"
-                  placeholder="DD/MM/YYYY"
-                  value={
-                    localFilters.dateRange[1]
+                <TouchableOpacity
+                  className="bg-white border border-gray-300 rounded-lg p-3 flex-row items-center justify-between"
+                  onPress={() => setShowEndDatePicker(true)}
+                >
+                  <Text className="text-base text-gray-900">
+                    {localFilters.dateRange[1]
                       ? localFilters.dateRange[1].toLocaleDateString()
-                      : ""
-                  }
-                  onChangeText={(text) => {
-                    const date = text ? new Date(text) : null;
-                    if (date && !isNaN(date.getTime())) {
-                      setLocalFilters((prev) => ({
-                        ...prev,
-                        dateRange: [prev.dateRange[0], date],
-                      }));
-                    }
-                  }}
-                />
+                      : "Select end date"}
+                  </Text>
+                  <Ionicons name="calendar" size={16} color="#6B7280" />
+                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -472,10 +432,56 @@ export default function FiltersModal({
           )}
         </ScrollView>
 
+        {/* Native Date Pickers */}
+        {showStartDatePicker && (
+          <DateTimePicker
+            value={localFilters.dateRange[0] || new Date()}
+            mode="date"
+            display={Platform.OS === "ios" ? "compact" : "default"}
+            onChange={(event, date) => {
+              setShowStartDatePicker(false);
+              if (date) {
+                setLocalFilters((prev) => {
+                  const start = date;
+                  const end = prev.dateRange[1];
+                  const adjustedEnd = end && end < start ? start : end;
+                  return { ...prev, dateRange: [start, adjustedEnd] };
+                });
+              }
+            }}
+            maximumDate={localFilters.dateRange[1] || undefined}
+            accentColor="#176298"
+          />
+        )}
+
+        {showEndDatePicker && (
+          <DateTimePicker
+            value={localFilters.dateRange[1] || localFilters.dateRange[0] || new Date()}
+            mode="date"
+            display={Platform.OS === "ios" ? "compact" : "default"}
+            onChange={(event, date) => {
+              setShowEndDatePicker(false);
+              if (date) {
+                setLocalFilters((prev) => {
+                  const end = date;
+                  const start = prev.dateRange[0];
+                  const adjustedStart = start && end < start ? end : start;
+                  return { ...prev, dateRange: [adjustedStart, end] };
+                });
+              }
+            }}
+            minimumDate={localFilters.dateRange[0] || undefined}
+            accentColor="#176298"
+          />
+        )}
+
         <View className="p-4 bg-white border-t border-gray-200">
           <TouchableOpacity
-            className="bg-miles-500 rounded-lg p-4 items-center"
+            className={`rounded-lg p-4 items-center ${
+              showStartDatePicker || showEndDatePicker ? "bg-gray-300" : "bg-miles-500"
+            }`}
             onPress={handleApplyFilters}
+            disabled={showStartDatePicker || showEndDatePicker}
           >
             <Text className="text-white text-base font-semibold">
               Apply Filters

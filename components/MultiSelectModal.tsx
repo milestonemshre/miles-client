@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import LoadingView from "./LoadingView";
 
 interface FilterOption {
   value: string;
